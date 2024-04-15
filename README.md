@@ -1,5 +1,5 @@
 # AD_AID_Project
-This repository contains the means to conduct a cross-trait analysis on electronic health record study groups. Its first use is detailed in...
+This repository contains the means to conduct a cross-trait risk analysis on electronic health record study groups. Its first use is detailed in...
 ___insert publication here___
 
 ...where it was used to quantify risk associations between autoimmune disorders and Alzheimer's Disease (AD) in both a case-control (CC) and cohort study design.
@@ -8,7 +8,7 @@ ___insert publication here___
 * While the original data input for the following code was curated from the University of California, San Francisco (UCSF) Observational Medical Outcomes Partnership (OMOP) Common Data Model (CDM), it can be easily applied to other electronic health record databases for other traits of interest.
 
 ## Required packages
-
+Required R packages can be found in the _requirements.txt_ file
 
 ## Scripts
 * Figures.Rmd - generates all figures in the manuscript
