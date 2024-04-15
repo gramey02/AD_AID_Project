@@ -5,7 +5,7 @@ This repository contains the means to conduct a cross-trait risk analysis on ele
 The original data input for the following code was curated from the University of California, San Francisco (UCSF) Observational Medical Outcomes Partnership (OMOP) Common Data Model (CDM), and is not publicly available due to patient data sharing privacy. Analagous data can be extracted from other electronic health record databases using the medical billing codes in the files below, or the pipeline can be adapted for other traits of interest.
 
 ## Required packages
-Required R packages can be found in the _requirements.txt_ file
+Required R packages can be found in the _requirements.rtf_ file
 
 ## Scripts
 * Figures.Rmd - generates all figures in the manuscript
