@@ -1,11 +1,8 @@
 # AD_AID_Project
-This repository contains the means to conduct a cross-trait risk analysis on electronic health record study groups. Its first use is detailed in...
-___insert publication here___
-
-...where it was used to quantify risk associations between autoimmune disorders and Alzheimer's Disease (AD) in both a case-control (CC) and cohort study design.
+This repository contains the means to conduct a cross-trait risk analysis on electronic health record study groups. It was first used to quantify risk associations between autoimmune disorders and Alzheimer's Disease (AD) in both a case-control (CC) and cohort study design.
 
 ## Data Availability
-* While the original data input for the following code was curated from the University of California, San Francisco (UCSF) Observational Medical Outcomes Partnership (OMOP) Common Data Model (CDM), it can be easily applied to other electronic health record databases for other traits of interest.
+The original data input for the following code was curated from the University of California, San Francisco (UCSF) Observational Medical Outcomes Partnership (OMOP) Common Data Model (CDM), and is not publicly available due to patient data sharing privacy. Analagous data can be extracted from other electronic health record databases using the medical billing codes in the files below, or the pipeline can be adapted for other traits of interest.
 
 ## Required packages
 Required R packages can be found in the _requirements.txt_ file
@@ -20,6 +17,5 @@ Required R packages can be found in the _requirements.txt_ file
 * DataCleaning_Cohort.R - data cleaning pipeline for the cohort study group 
 
 ## Figures
-* Fig 1 - 
 
 ## Tables
