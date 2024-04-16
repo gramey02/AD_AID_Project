@@ -1,6 +1,9 @@
 # AD_AID_Project
 This repository contains the means to conduct a cross-trait risk analysis on electronic health record study groups. It was first used to quantify risk associations between autoimmune disorders and Alzheimer's Disease (AD) in both a case-control (CC) and cohort study design.
+
+
 ![Fig1](https://github.com/gramey02/AD_AID_Project/assets/94878687/a1fbe3e5-3c48-4d1a-8897-1596c69854b6)
+
 
 ## Data Availability
 The original data input for the following code was curated from the University of California, San Francisco (UCSF) Observational Medical Outcomes Partnership (OMOP) Common Data Model (CDM), and is not publicly available due to patient data sharing privacy. Analagous data can be extracted from other electronic health record databases using the medical billing codes in the files below, or the pipeline can be adapted for other traits of interest.
