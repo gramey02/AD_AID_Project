@@ -1,0 +1,2053 @@
+---
+title: "AD/AID Manuscript Figures"
+output: html_notebook
+---
+# Figure Generation Notebook
+This is the master script for creating plots for the AD/AID manuscript
+
+```{r library loading}
+library(dplyr)
+library(ggExtra)
+library(ggplot2)
+library(ggpubr)
+library(ggrepel)
+library(ggsci)
+library(hash)
+library(stringr)
+library(tibble)
+```
+
+### Load UCSF data from the full study groups
+```{r data loading}
+load('M:/Plotting_Data/CC_overall_m1b.Rdata')
+load('M:/Plotting_Data/RC_overall_m1b.Rdata')
+
+#reformat to combine cc and rc
+df <- rbind(cc_metrics_overall %>% add_column(study_group = "CC"),
+            rc_metrics_overall %>% add_column(study_group = "rc"))
+
+#calculate some sample sizes for later use
+cc_sum<-cc_table_e_o[1] + cc_table_e_o[2] + cc_table_e_o[3] + cc_table_e_o[4]
+rc_sum<-rc_table_e_o[1] + rc_table_e_o[2] + rc_table_e_o[3] + rc_table_e_o[4]
+male_cc_sum<-cc_table_m_o[1] + cc_table_m_o[2] + cc_table_m_o[3] + cc_table_m_o[4]
+female_cc_sum<-cc_table_f_o[1] + cc_table_f_o[2] + cc_table_f_o[3] + cc_table_f_o[4]
+male_rc_sum<-rc_table_m_o[1] + rc_table_m_o[2] + rc_table_m_o[3] + rc_table_m_o[4]
+female_rc_sum<-rc_table_f_o[1] + rc_table_f_o[2] + rc_table_f_o[3] + rc_table_f_o[4]
+```
+
+### Plot the full study group/overall odds ratios from the UCSF data
+```{r}
+#filter for the full cohort data
+df_overall <- df %>% filter(Cohort_Type == "Full Cohort")
+
+#plot the data
+p<-ggplot(data=df_overall, aes(x=study_group, y=OR, ymin=(lower), ymax=(upper), color=Cohort_Type))+
+  geom_pointrange(size= 1, linewidth=1)+
+  geom_hline(yintercept = 1, linetype="dashed", 
+             color = "black", size=1)+
+  theme_classic()+
+  scale_x_discrete(labels=c(paste("Case-Control\nN=", 
+                                  formatC(cc_sum, format="d", big.mark=","), 
+                                  sep=""),
+                            paste("Cohort\nN=", formatC(rc_sum, format="d",
+                                                        big.mark=","), sep="")
+                            ))+
+  ylab("AD Odds Ratio (95% CI)")+
+  xlab("Study Group")+
+  #add annotations for significance
+  annotate("text", x = 1, y = df_overall$upper[1]+0.1, 
+           label = df_overall$sig[1], size=7.5)+
+  annotate("text", x = 2, y = df_overall$upper[2]+0.1, 
+           label = df_overall$sig[2], size=7.5)+
+  #add horizontal bars to make the confidence intervals more prominent
+  geom_segment(aes(x=0.95,xend=1.05,y=upper[1],yend=upper[1]))+
+  geom_segment(aes(x=0.95,xend=1.05,y=lower[1],yend=lower[1]))+
+  geom_segment(aes(x=1.95,xend=2.05,y=upper[2],yend=upper[2]))+
+  geom_segment(aes(x=1.95,xend=2.05,y=lower[2],yend=lower[2]))+
+  ggtitle('Overall AD Risk Conferred by Autoimmunity') +
+  theme(plot.title = element_text(hjust = 0.5, vjust = 1))+
+  theme(axis.text.x=element_text(size=20),
+        axis.title.x=element_blank(),
+        axis.text.y=element_text(size=20),
+        axis.title.y=element_text(size=20))+ #15 for the actual manuscript
+  scale_color_manual(values=c("#011B47"), guide="none")
+p
+
+```
+
+Save the image
+```{r}
+ggsave(filename="M:/Figures/OverallOR_2.png", plot=p, device='png', 
+       dpi=600, width=6, height=4)
+ggsave(filename="~/EHR/toBox/OverallOR_2.png", plot=p, device='png', 
+       dpi=600, width=6, height=4)
+```
+
+
+### Odds ratios in female and male groups at UCSF (still overall, not stratified by disease subtype or specific disorder)
+```{r}
+#filter to include only female- or male-specific values
+df_sexes <- df %>% filter(Cohort_Type %in% c("Female Cohort", "Male Cohort"))
+
+#calculate some extra information for plotting
+#e.g. log of confidence interval bounds
+df_sexes <- df_sexes %>% add_column(lower_log10 = log10(df_sexes$lower)) %>%
+  add_column(upper_log10 = log10(df_sexes$upper))
+
+#parse out data frames by sex and study design
+female_cc<- df_sexes %>% filter(Cohort_Type == "Female Cohort") %>% filter(study_group=="CC")
+male_cc<- df_sexes %>% filter(Cohort_Type == "Male Cohort") %>% filter(study_group=="CC")
+female_rc<- df_sexes %>% filter(Cohort_Type == "Female Cohort") %>% filter(study_group=="rc")
+male_rc<- df_sexes %>% filter(Cohort_Type == "Male Cohort") %>% filter(study_group=="rc")
+cc_sexes<-df_sexes %>% filter(study_group=="CC")
+rc_sexes<-df_sexes %>% filter(study_group=="rc") #rc denotes the cohort study group
+
+#Data frames containing text to be added to different panels of the plot
+ann_text1 <- data.frame(OR = female_cc$upper[1] + 0.15 ,Cohort_Type = "Female Cohort",lab = female_cc$sig[1], study_group = "CC")
+ann_text2 <- data.frame(OR = male_cc$upper[1] + 0.1 , Cohort_Type = "Male Cohort", lab=male_cc$sig[1], study_group = "CC")
+ann_text3 <- data.frame(OR = female_rc$upper[1] + 0.15 , Cohort_Type = "Female Cohort", lab=female_rc$sig[1], study_group = "rc")
+ann_text4 <- data.frame(OR = male_rc$upper[1] + 0.25 , Cohort_Type = "Male Cohort", lab=male_rc$sig[1], study_group = "rc")
+
+#Data frames for adding confidence interval bars and limits of error bars
+geom_segment(aes(x=1.95,xend=2.05,y=lower[2],yend=lower[2])) #have to do some interesting work to 
+data.segm1<-data.frame(y= female_cc$lower[1], x=1, yend= female_cc$upper[1], 
+                       xend=1, study_group=as.factor("CC"))
+data.segm1b<-data.frame(y= female_cc$lower[1], x=0.9, yend= female_cc$lower[1],
+                        xend=1.10, study_group=as.factor("CC"))
+data.segm1c<-data.frame(y= female_cc$upper[1], x=0.9, yend= female_cc$upper[1],
+                        xend=1.10, study_group=as.factor("CC"))
+data.segm2<-data.frame(y= male_cc$lower[1], x=2, yend= male_cc$upper[1], 
+                       xend=2, study_group=as.factor("CC"))
+data.segm2b<-data.frame(y= male_cc$lower[1], x=1.9, yend= male_cc$lower[1], 
+                        xend=2.10, study_group=as.factor("CC"))
+data.segm2c<-data.frame(y= male_cc$upper[1], x=1.9, yend= male_cc$upper[1], 
+                        xend=2.10, study_group=as.factor("CC"))
+data.segm3<-data.frame(y= female_rc$lower[1], x=1, yend= female_rc$upper[1], 
+                       xend=1, study_group=as.factor("rc"))
+data.segm3b<-data.frame(y= female_rc$lower[1], x=0.9, yend= female_rc$lower[1], 
+                        xend=1.1, study_group=as.factor("rc"))
+data.segm3c<-data.frame(y= female_rc$upper[1], x=0.9, yend= female_rc$upper[1],
+                        xend=1.1, study_group=as.factor("rc"))
+data.segm4<-data.frame(y= male_rc$lower[1], x=2, yend= male_rc$upper[1], 
+                       xend=2, study_group=as.factor("rc"))
+data.segm4b<-data.frame(y= male_rc$lower[1], x=1.9, yend= male_rc$lower[1], 
+                        xend=2.1, study_group=as.factor("rc"))
+data.segm4c<-data.frame(y= male_rc$upper[1], x=1.9, yend= male_rc$upper[1], 
+                        xend=2.1, study_group=as.factor("rc"))
+
+# Set facet labels
+study_group.labs <- c(paste("Case-Control (N = ", formatC(cc_sum, format="d",
+                                                          big.mark=","), ")", sep=""), 
+                      paste("Cohort (N = ", formatC(rc_sum, format="d", 
+                                                    big.mark=","), ")", sep=""))
+names(study_group.labs) <- c("CC", "rc")
+
+#plot the data
+p2<-ggplot(data=df_sexes, 
+       aes(x=Cohort_Type, y=(OR), group=study_group)) +
+  geom_point(size=4) +
+  coord_flip() + 
+  scale_x_discrete(labels=c("Male Cohort" = "Male Subset", 
+                            "Female Cohort" = "Female Subset"))+
+  theme_bw()+
+  scale_y_log10(limits=c(NA, 4))+
+  geom_hline(yintercept = 1, linetype="dashed", 
+             color = "black", size=1)+
+  ggtitle('Sex-stratified AD Risk Conferred by Autoimmunity') +
+  theme(plot.title = element_text(hjust = 0.5, vjust = 1))+
+  ylab("AD Odds Ratio (95% CI)") +
+  facet_wrap(~study_group, ncol=1, labeller = labeller(study_group = study_group.labs))+
+  geom_segment(data=data.segm1, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_segment(data=data.segm1b, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_segment(data=data.segm1c, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_segment(data=data.segm2, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_segment(data=data.segm2b, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_segment(data=data.segm2c, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_segment(data=data.segm3, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_segment(data=data.segm3b, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_segment(data=data.segm3c, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_segment(data=data.segm4, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_segment(data=data.segm4b, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_segment(data=data.segm4c, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_text(data = ann_text1, label=ann_text1$lab[1], size=7)+
+  geom_text(data = ann_text2, label=ann_text2$lab[1], size=7)+
+  geom_text(data = ann_text3, label=ann_text3$lab[1], size=7)+
+  geom_text(data = ann_text4, label=ann_text4$lab[1], size=7)+
+  theme(strip.background =element_rect(fill="white"))+
+  theme(strip.text = element_text(colour = 'black'))+
+  theme(axis.title.y=element_blank(),
+        axis.text.x=element_text(size=15),
+        axis.text.y = element_text(size=15),
+        axis.title.x=element_text(size=14),
+        strip.text = element_text(size = 12))
+  
+p2
+```
+
+Save the image
+```{r}
+ggsave(filename="M:/Figures/Sex_OverallOR.png", plot=p2, device='png', 
+       dpi=600, width=8.0, height=4.5)
+ggsave(filename="~/EHR/toBox/Sex_OverallOR.png", plot=p2, device='png', 
+       dpi=600, width=8.0, height=4.5)
+```
+
+```{r clear workspace}
+rm(list=ls())
+```
+
+### AD prevalence stratified by sex at UCSF
+```{r}
+#load data for the prevalence plot from the cohort study group
+load('M:/Plotting_Data/RC_prev_m1b.Rdata')
+
+#add asterisks to dataframe indicating significance level
+rc_prev_sig<-rc_prev_sig %>% add_column(sig=NA)
+for(i in 1:length(rc_prev_sig$pval_adj)){
+  if(rc_prev_sig$pval_adj[i]<=0.001){
+    rc_prev_sig$sig[i]<-"***"
+  }
+  else if(rc_prev_sig$pval_adj[i]<=0.01){
+    rc_prev_sig$sig[i]<-"**"
+  }
+  else if(rc_prev_sig$pval_adj[i]<=0.05){
+    rc_prev_sig$sig[i]<-"*"
+  }
+}
+
+#plot the data
+p3<-ggplot(data=rc_prev_df)+geom_bar(aes(x=aid_status, y=ad_prev*100, fill = gender), 
+                                 stat='identity', position=position_dodge(),
+                                 color='black')+
+  geom_errorbar(aes(x = aid_status, ymin=lower_CI*100, ymax=upper_CI*100, fill=gender), width=.2,
+                position=position_dodge(0.85), stat="identity")+
+  theme_minimal()+
+  theme(axis.title.x=element_blank())+
+        #legend.text=element_text(face='bold'),
+        #legend.title=element_text(face="bold"))+
+  scale_x_discrete(labels=c("Autoimmune", "Control"))+
+  scale_y_continuous()+
+  labs(fill="Sex")+
+  ylab("AD prevalence (%)")+
+  scale_fill_simpsons()+
+  geom_segment(aes(x=0.8,xend=1.8,y=upper_CI[1]*100+1,yend=upper_CI[1]*100+1))+
+  geom_segment(aes(x=1.2,xend=2.2,y=upper_CI[1]*100+2,yend=upper_CI[1]*100+2))+
+  geom_segment(aes(x=0.8,xend=1.2,y=upper_CI[1]*100+0.5,yend=upper_CI[1]*100+0.5))+
+  geom_segment(aes(x=1.8,xend=2.2,y=upper_CI[1]*100+1.5,yend=upper_CI[1]*100+1.5))+
+  annotate("text", x = 1.3, y = rc_prev_df$upper_CI[1]*100+1.05, label = rc_prev_sig$sig[3], size=8)+
+  annotate("text", x = 1, y = rc_prev_df$upper_CI[1]*100+0.55, label = rc_prev_sig$sig[1], size=8)+
+  annotate("text", x = 2, y = rc_prev_df$upper_CI[1]*100+1.55, label = rc_prev_sig$sig[2], size=8)+
+  annotate("text", x = 1.7, y = rc_prev_df$upper_CI[1]*100+2.05, label = rc_prev_sig$sig[4], size=8)+
+  theme(axis.line.y = element_line(color="grey"),
+        axis.line.x = element_line(color="grey"))+
+  scale_y_continuous(expand = c(0, 0.01), limits=c(NA,5.75))+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())+
+  theme(axis.title.y=element_text(size=17),
+        axis.text.y=element_text(size=17),
+        axis.text.x=element_text(size=17))
+  
+p3
+
+```
+
+```{r}
+ggsave(filename="M:/Figures/RCprev.png", plot=p3, device='png', dpi=600, 
+       width=10, height=6.0)
+ggsave(filename="~/EHR/toBox/RCprev.png", plot=p3, device='png', dpi=600, 
+       width=10, height=6.0)
+```
+
+### Odds ratios stratified by autoimmune disorder subtype (also called disease group)
+(still overall, not further stratified by sex)
+```{r}
+#load the data
+load('M:/Plotting_Data/CC_group_m1b.Rdata') #case control subtype odds ratios
+load('M:/Plotting_Data/RC_group_m1b.Rdata') #cohort subtype odds ratios
+
+#pval correction before was slightly off, use bonferroni correction here (8 subtypes)
+group_cc$adj_pval<-group_cc$pval*8
+group_rc$adj_pval<-group_rc$pval*8
+
+#reformat the data so case control and cohort data can be plotted together
+names(group_rc)[names(group_rc) == 'lower'] <- 'lower_CI' #change column names to match between data frames
+names(group_rc)[names(group_rc) == 'upper'] <- 'upper_CI'
+names(group_rc)[names(group_rc) == 'Cohort_Type'] <- 'cohort_type'
+names(group_cc)[names(group_cc) == 'pvals'] <- 'pval'
+group_cc<-group_cc[names(group_rc)] #change column orders to match
+group_all<-rbind(group_cc %>% add_column(study_group = "cc"), 
+                 group_rc %>% add_column(study_group="rc"))
+
+#set an opacity levels if odds ratios pass corrected significance threshold
+group_all<-group_all %>% add_column(transparent = 
+                                      ifelse(group_all$adj_pval<=0.05, TRUE, FALSE))
+group_all<-group_all %>% add_column(threshold_color = 
+                                      ifelse(group_all$adj_pval<=0.05, TRUE, FALSE))
+
+#isolate the "overall" odds ratios (we'll look at specific sexes later)
+overall_group<-group_all %>% filter(cohort_type == "Overall")
+
+#set a vertical order of subtype names on the y axis
+ordered_df<- overall_group %>% arrange(desc(OR)) %>% arrange(study_group)
+level_order <- rev(unique(ordered_df$group_names))
+
+#plot the data
+p4<-ggplot(data=overall_group, aes(y=factor(group_names, level = level_order), x=study_group,
+                                        fill=ifelse(adj_pval <= 0.05, adj_pval, NA),
+                                        size=OR))+
+  geom_point(shape=21, aes(alpha=transparent, color=threshold_color))+ #change these colors #color='#edeff0'
+  scale_x_discrete(position = "top", labels=c("Case-Control", "Cohort")) +
+  scale_fill_gradient(low = "#085708",
+                      high = "#87d49c",
+                      name="adj. pval",
+                      trans='log',
+                      #labels=function(adj_pval) format(adj_pval, scientific = TRUE),
+                      breaks=c(0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001, 0.000005, 0.000001))+
+  scale_size(range=c(1,20),
+             name="OR", breaks = c(1, 3, 5, 10, 15, 20))+
+  theme_minimal()+
+  theme(panel.border = element_rect(color = "grey", fill=NA),
+        axis.text.x=element_text(size=12),
+        axis.title.x=element_blank())+
+  xlab("Cohort Type")+ylab("Autoimmune Disease Group")+
+  scale_alpha_discrete(range = c(0.35, 0.9), guide='none')+
+  scale_color_manual(values=c("#edeff0", "black"), guide='none')
+p4
+
+#keep this data in the environment
+#(it will be plotted with the stanford version later)
+overall_group_ucsf<-overall_group %>% add_column(val="ucsf")
+```
+
+Save the image
+```{r}
+ggsave(filename="M:/Figures/DG_overall.png", plot=p4, device='png', 
+       dpi=600, width=5, height=5.75)
+ggsave(filename="~/EHR/toBox/DG_Overall.png", plot=p4, device='png', 
+       dpi=600, width=5, height=5.75)
+```
+
+
+### Odds ratios stratified by both sex and autoimmune disorder subtype at UCSF
+```{r 2c}
+#use the group_all data frame above, and parse it for specific sexes
+female_group<-group_all %>% filter(cohort_type =="Female") %>% filter(study_group=="cc")
+colnames(female_group)<-paste(colnames(female_group),"female",sep="_")
+female_ordered<-female_group %>% arrange(desc(group_names_female))
+male_group<-group_all %>% filter(cohort_type =="Male") %>% filter(study_group=="cc")
+colnames(male_group)<-paste(colnames(male_group),"male",sep="_")
+male_ordered<-male_group %>% arrange(desc(group_names_male))
+names(female_ordered)[names(female_ordered) == 'group_names_female'] <- 'group_names'
+names(male_ordered)[names(male_ordered) == 'group_names_male'] <- 'group_names'
+
+#now merge columns
+sexes_cc<-merge(female_ordered,male_ordered, by='group_names')
+
+#create a fill scheme that represents significance in both f & m, only f, or only m
+sexes_cc<-sexes_cc %>% add_column(color_threshold=NA)
+for(i in 1:length(sexes_cc$color_threshold)){
+  if(sexes_cc$adj_pval_female[i]<=0.05 && sexes_cc$adj_pval_male[i]<=0.05){sexes_cc$color_threshold[i]<-"1"}
+  else if(sexes_cc$adj_pval_female[i]<=0.05 && sexes_cc$adj_pval_male[i]>0.05){sexes_cc$color_threshold[i]<-"2"}
+  else if(sexes_cc$adj_pval_female[i]>0.05 && sexes_cc$adj_pval_male[i]<=0.05){sexes_cc$color_threshold[i]<-"3"}
+  else if(sexes_cc$adj_pval_female[i]>0.05 && sexes_cc$adj_pval_male[i]>0.05){sexes_cc$color_threshold[i]<-"4"}
+}
+
+#create a transparency scheme that represents overall lack of significance
+sexes_cc<-sexes_cc %>% add_column(transparent = ifelse(sexes_cc$color_threshold=="4", FALSE, TRUE))
+
+#create a color scheme that represents overall lack of significance 
+sexes_cc<-sexes_cc %>% add_column(outline=ifelse(sexes_cc$color_threshold=="4", 
+                                                 TRUE, FALSE))
+
+#plot the data
+p5<-ggplot(data=sexes_cc, aes(x=OR_female, 
+                                         y=OR_male))+
+  theme_classic()+
+  xlab("Female OR")+
+  ylab("Male OR")+
+  geom_abline(intercept = 0, slope = 1, linetype='dashed')+
+  scale_alpha_discrete(range = c(0.35, 0.9), guide='none')+
+  scale_color_manual(values=c("black", "#edeff0"), guide='none')+
+  scale_fill_manual(values=c("#5e915a", "#FED439", "#5A6771"), 
+                    name="Significance",
+                    labels = c("Male adj. pval <= 0.05\nand Female adj. pval <= 0.05", 
+                               "Female adj. pval <= 0.05", 
+                               "Male adj. pval <= 0.05"))+ #"709AE1" for the fourth color
+  theme(legend.spacing.y = unit(0.5, 'cm'))+
+  guides(fill = guide_legend(byrow = TRUE))+
+  #geom_errorbar(aes(ymin = lower_CI_male,ymax = upper_CI_male), color="lightgrey")+
+  #geom_errorbar(aes(xmin = lower_CI_female,xmax = upper_CI_female), color='lightgrey')+
+  geom_point(size = 4, aes(alpha=transparent, color=outline, fill=color_threshold), shape=21)+
+  #scale_y_log10(limits=c(NA, 80))+
+  #scale_x_log10(limits=c(NA, 40))+
+  geom_text_repel(data=subset(sexes_cc, color_threshold != '4'),
+            aes(x=OR_female,y=OR_male,label = group_names), 
+            check_overlap = T, nudge_x = 0.5, nudge_y = 0.5, size=6)+
+  theme(axis.title.y = element_text(size=20),
+        axis.text.y = element_text(size=18),
+        axis.title.x = element_text(size=20),
+        axis.text.x = element_text(size=18),
+        legend.text=element_text(size=18),
+        legend.position='none')+
+  scale_y_continuous(limits=c(NA,35))+
+  scale_x_continuous(limits=c(NA,35))
+
+p5
+
+#keep this data frame in the workspace for later plotting
+sexes_cc_ucsf<-sexes_cc %>% add_column(val="ucsf")
+```
+
+Save the image
+```{r}
+ggsave(filename="M:/Figures/DG_CC_sex_m1b.png", plot=p5, device='png', 
+       dpi=600, width=6, height=6)
+ggsave(filename="~/EHR/toBox/DG_CC_sex_m1b.png", plot=p5, device='png', 
+       dpi=600, width=6, height=6)
+```
+
+That was for the case-control study group at UCSF. Now create the same type of 
+plot for the cohort study group at UCSF.
+```{r now create the same kind of plot for the cohort study desgin}
+#parse dataframe to include sex-specific groups
+female_group<-group_all %>% filter(cohort_type =="Female") %>% filter(study_group=="rc")
+colnames(female_group)<-paste(colnames(female_group),"female",sep="_")
+female_ordered<-female_group %>% arrange(desc(group_names_female))
+male_group<-group_all %>% filter(cohort_type =="Male") %>% filter(study_group=="rc")
+colnames(male_group)<-paste(colnames(male_group),"male",sep="_")
+male_ordered<-male_group %>% arrange(desc(group_names_male))
+names(female_ordered)[names(female_ordered) == 'group_names_female'] <- 'group_names'
+names(male_ordered)[names(male_ordered) == 'group_names_male'] <- 'group_names'
+
+#now merge columns
+sexes_rc<-merge(female_ordered,male_ordered, by='group_names')
+
+#create a fill scheme that represents significance
+sexes_rc<-sexes_rc %>% add_column(color_threshold=NA)
+for(i in 1:length(sexes_rc$color_threshold)){
+  if(sexes_rc$adj_pval_female[i]<=0.05 && sexes_rc$adj_pval_male[i]<=0.05){sexes_rc$color_threshold[i]<-"1"}
+  else if(sexes_rc$adj_pval_female[i]<=0.05 && sexes_rc$adj_pval_male[i]>0.05){sexes_rc$color_threshold[i]<-"2"}
+  else if(sexes_rc$adj_pval_female[i]>0.05 && sexes_rc$adj_pval_male[i]<=0.05){sexes_rc$color_threshold[i]<-"3"}
+  else if(sexes_rc$adj_pval_female[i]>0.05 && sexes_rc$adj_pval_male[i]>0.05){sexes_rc$color_threshold[i]<-"4"}
+}
+
+#create a transparency scheme that represents overall lack of signficance
+sexes_rc<-sexes_rc %>% add_column(transparent = 
+                                    ifelse(sexes_rc$color_threshold=="4", 
+                                           FALSE, TRUE))
+
+#create a color scheme that represents overall lack of significance
+sexes_rc<-sexes_rc %>% add_column(outline=ifelse(sexes_rc$color_threshold=="4", 
+                                                 TRUE, FALSE))
+
+#can manually deal with some subtypes here
+#e.g. the hematologic category is significant, but not biologically interpretable (OR=Infinity)
+sexes_rc$OR_male[4]<-1
+sexes_rc$color_threshold[4]<-'4'
+sexes_rc$transparent[4]<-FALSE
+
+p6<-ggplot(data=sexes_rc, aes(x=OR_female, 
+                                         y=OR_male))+
+  theme_classic()+
+  xlab("Female OR")+
+  ylab("Male OR")+
+  geom_abline(intercept = 0, slope = 1, linetype='dashed')+
+  scale_alpha_discrete(range = c(0.35, 0.9), guide='none')+
+  scale_color_manual(values=c("black", "#edeff0"), guide='none')+
+  scale_fill_manual(values=c("#5e915a", "#FED439", "#709AE1", "#5A6771"), 
+                    name="Significance",
+                    labels = c("Male adj. pval <= 0.05\nand Female adj. pval <= 0.05", 
+                               "Female adj. pval <= 0.05", 
+                               "Male adj. pval <= 0.05", 
+                               "Male adj. pval > 0.05\nand Female adj. pval > 0.05"))+ #"709AE1" for the fourth color
+  theme(legend.spacing.y = unit(0.5, 'cm'))+
+  guides(fill = guide_legend(byrow = TRUE))+
+  #geom_errorbar(aes(ymin = lower_CI_male,ymax = upper_CI_male), color="lightgrey")+
+  #geom_errorbar(aes(xmin = lower_CI_female,xmax = upper_CI_female), color='lightgrey')+
+  geom_point(size = 4, aes(alpha=transparent, color=outline, fill=color_threshold), shape=21)+
+  scale_y_continuous(limits=c(1, 4))+
+  scale_x_continuous(limits=c(1,4))+
+  #scale_x_log10(limits=c(NA, 40))+
+  geom_text_repel(data=subset(sexes_rc, outline != TRUE),
+            aes(x=OR_female,y=OR_male,label = group_names), 
+            check_overlap = T, nudge_x = 0.05, nudge_y = 0.15, size=6,
+            segment.color = NA)+
+  theme(axis.title.y = element_text(size=20),
+        axis.text.y = element_text(size=18),
+        axis.title.x = element_text(size=20),
+        axis.text.x = element_text(size=18),
+        legend.text=element_text(size=18),
+        legend.position='none')
+
+p6
+
+#keep this data frame in the workspace for more plotting later
+sexes_rc_ucsf<-sexes_rc %>% add_column(val="ucsf")
+```
+
+Save the image
+```{r}
+ggsave(filename="M:/Figures/DG_RC_sex_m1b.png", plot=p6, device='png', 
+       dpi=600, width=6, height=6)
+ggsave(filename="~/EHR/toBox/DG_RC_sex_m1b.png", plot=p6, device='png', 
+       dpi=600, width=6, height=6)
+```
+
+### Now plot the overall odds ratios by specific autoimmune disorder at UCSF
+```{r}
+#get the disease groups that were significant, either at UCSF or at Stanford
+sig_groups<-c("Hematologic", "Musculoskeletal", "Vascular", "Endocrine", "Dermatologic", "Gastrointestinal")
+
+#clear up workspace
+rm(cc_prev_df, cc_prev_p, cc_prev_sig, cc_prev_ss, female_group, female_ordered, group_all, group_cc, group_p, group_rc, male_group, male_ordered, ordered_df, overall_group, rc_prev_df, rc_prev_p, rc_prev_sig, rc_prev_ss, sexes_cc, sexes_group_rc, sexes_group_cc, sexes_rc, i)
+
+#load individual disorder odds ratio dataframes
+load('M:/Plotting_Data/CC_ind_m1b.Rdata') #ORs for case control at UCSF
+load('M:/Plotting_Data/RC_ind_m1b.Rdata') #ORs for cohort at UCSF
+
+#For now, filter to only include the individual disorders that were in significant subtype groups
+names(ind_rc)[names(ind_rc) == 'AID'] <- 'aid_names'
+
+#add column to indicate if we should keep the data point for plotting or not
+ind_cc<-ind_cc %>% add_column(keep=0) %>% add_column(group = NA)
+ind_rc<-ind_rc %>% add_column(keep=0) %>% add_column(group = NA)
+
+#denote if an individual autoimmune disorder was in a sig subtype group
+for(i in 1:length(ind_cc$aid_names)){
+  cur_group<-group_lookup[[ind_cc$aid_names[i]]]
+  ind_cc$group[i]<-cur_group
+  if(cur_group %in% sig_groups){ind_cc$keep[i]<-1}
+}
+for(i in 1:length(ind_rc$aid_names)){
+  cur_group<-group_lookup[[ind_rc$aid_names[i]]]
+  ind_rc$group[i]<-cur_group
+  if(cur_group %in% sig_groups){ind_rc$keep[i]<-1}
+}
+#finally, filter
+ind_cc_filt<-ind_cc %>% filter(keep==1)
+ind_rc_filt<-ind_rc %>% filter(keep==1)
+
+
+#bind case-control and cohort data together
+all_ind <- rbind(ind_cc_filt %>% add_column(study_group = "cc"),
+                 ind_rc_filt %>% add_column(study_group = "rc"))
+
+#set an opacity levels based on significance
+all_ind<-all_ind %>% add_column(transparent = ifelse(all_ind$adj_pval<=0.05, 
+                                                     TRUE, FALSE))
+all_ind<-all_ind %>% add_column(threshold_color = ifelse(all_ind$adj_pval<=0.05, 
+                                                         TRUE, FALSE))
+
+#filter dataframe to only include the overall results
+ind_overall<-all_ind %>% filter(cohort_type == "Overall")
+
+#set the order of group names that will appear
+ordered_df<- ind_overall %>% arrange(factor(group, levels = c("Hematologic", "Gastrointestinal", "Dermatologic", "Endocrine", "Musculoskeletal", "Vascular")), adj_pval, desc(OR))
+
+#remove '_' from disease names for plotting
+ordered_df <- ordered_df %>% add_column(proper_names = gsub("_", " ", ordered_df$aid_names))
+
+#get the order you want diseases to appear on the plot
+level_order <- rev(unique(ordered_df$proper_names))
+
+#How to deal with the NA/Inf OR values?
+#Note the Inf values on the plot itself
+#Mark the NA values with a line
+#also indicate that any NA pvals need to be a certain opacity and outline color
+#based on lack of sig:
+ordered_df$transparent[25]<-FALSE
+ordered_df$transparent[26]<-FALSE
+ordered_df$threshold_color[25]<-FALSE
+ordered_df$threshold_color[26]<-FALSE
+
+#finally, plot the data
+p7<-ggplot(data=ordered_df, aes(y=factor(proper_names, level = level_order), 
+                                    x=study_group,
+                                        fill=ifelse(adj_pval <= 0.05, adj_pval, NA),
+                                        size=OR))+
+  geom_point(shape=21, aes(alpha=transparent, color=threshold_color))+
+  scale_x_discrete(position = "top", labels=c("Case-Control", "Cohort")) +
+  scale_fill_gradient(low = "#085708",
+                      high = "#87d49c",
+                      name="adj. pval",
+                      trans='log',
+                      breaks=c(0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 
+                               0.00005, 0.00001, 0.000005, 0.000001))+
+  scale_size(range=c(1,35),
+             name="OR", breaks = c(1, 3, 5, 10, 15, 20))+
+  theme_minimal()+
+  theme(panel.border = element_rect(color = "grey", fill=NA),
+        axis.text.x=element_text(size=12),
+        axis.title.x=element_blank())+
+  xlab("Cohort Type")+ylab("Individual Autoimmune Diseases")+
+  scale_alpha_discrete(range = c(0.35, 0.9), guide='none')+
+  scale_color_manual(values=c("#edeff0", "black"), guide='none')+
+  theme(axis.text.y=element_text(size=12),
+        axis.text.x = element_text(size=14))
+  
+p7
+
+#keep this data frame in the environment for future plotting
+ordered_df_ucsf<-ordered_df %>% add_column(val='ucsf')
+```
+
+Save the image
+```{r}
+ggsave(filename="M:/Figures/ID_overall_m1b.png", plot=p7, device='png', 
+       dpi=600, width=7, height=12.5) #ID for individual disease
+ggsave(filename="~/EHR/toBox/ID_overall_m1b.png", plot=p7, device='png', 
+       dpi=600, width=7, height=12.5)
+```
+
+
+### Now create a sex-stratified individual autoimmune disorder plot
+```{r}
+#filter for the male and female subsets of the case-control
+female_group<-all_ind %>% filter(cohort_type =="Female") %>% filter(study_group=="cc")
+colnames(female_group)<-paste(colnames(female_group),"female",sep="_")
+male_group<-all_ind %>% filter(cohort_type =="Male") %>% filter(study_group=="cc")
+colnames(male_group)<-paste(colnames(male_group),"male",sep="_")
+names(female_group)[names(female_group) == 'aid_names_female'] <- 'aid_names'
+names(male_group)[names(male_group) == 'aid_names_male'] <- 'aid_names'
+#order the dfs
+female_ordered<-female_group %>% arrange(desc(aid_names))
+male_ordered<-male_group %>% arrange(desc(aid_names))
+
+
+#now merge columns
+sexes_cc<-merge(female_ordered,male_ordered, by='aid_names')
+
+#take care of some NA values
+for(i in 1:length(sexes_cc$aid_names)){
+  if(is.na(sexes_cc$adj_pval_female[i])){sexes_cc$adj_pval_female[i]<-1}
+  if(is.na(sexes_cc$adj_pval_male[i])){sexes_cc$adj_pval_male[i]<-1}
+}
+
+#create a fill scheme that represents significance in both f & m, only f, or only m
+sexes_cc<-sexes_cc %>% add_column(color_threshold=NA)
+for(i in 1:length(sexes_cc$color_threshold)){
+  if(sexes_cc$adj_pval_female[i]<=0.05 && sexes_cc$adj_pval_male[i]<=0.05){sexes_cc$color_threshold[i]<-"1"}
+  else if(sexes_cc$adj_pval_female[i]<=0.05 && sexes_cc$adj_pval_male[i]>0.05){sexes_cc$color_threshold[i]<-"2"}
+  else if(sexes_cc$adj_pval_female[i]>0.05 && sexes_cc$adj_pval_male[i]<=0.05){sexes_cc$color_threshold[i]<-"3"}
+  else if(sexes_cc$adj_pval_female[i]>0.05 && sexes_cc$adj_pval_male[i]>0.05){sexes_cc$color_threshold[i]<-"4"}
+}
+
+#create a transparency scheme that represents overall lack of signficance
+sexes_cc<-sexes_cc %>% add_column(transparent = 
+                                    ifelse(sexes_cc$color_threshold=="4", 
+                                           FALSE, TRUE))
+
+#create a color scheme that represents overall lack of significance
+sexes_cc<-sexes_cc %>% add_column(outline=ifelse(sexes_cc$color_threshold=="4", 
+                                                 TRUE, FALSE))
+
+#remove '_' from disorder names for plotting
+sexes_cc <- sexes_cc %>% add_column(proper_names = gsub("_", " ", 
+                                                        sexes_cc$aid_names))
+
+#take care of some inf and na values by coercing to an OR of 1
+for(i in 1:length(sexes_cc$aid_names)){
+  if(is.na(sexes_cc$OR_female[i])){sexes_cc$OR_female[i]<-1}
+  else if(is.na(sexes_cc$OR_female[i])==FALSE && is.finite(sexes_cc$OR_female[i])==FALSE){sexes_cc$OR_female[i]<-1}
+
+  if(is.na(sexes_cc$OR_male[i])){sexes_cc$OR_male[i]<-1}
+  if(is.na(sexes_cc$OR_male[i])==FALSE && is.finite(sexes_cc$OR_male[i])==FALSE){sexes_cc$OR_male[i]<-1}
+}
+
+
+#plot the data
+p8<-ggplot(data=sexes_cc, aes(x=OR_female, 
+                                         y=OR_male))+
+  theme_classic()+
+  xlab("Female OR")+
+  ylab("Male OR")+
+  geom_abline(intercept = 0, slope = 1, linetype='dashed')+
+  scale_alpha_discrete(range = c(0.35, 0.9), guide='none')+
+  scale_color_manual(values=c("black", "#edeff0"), guide='none')+
+  scale_fill_manual(values=c("#5e915a", "#FED439", "#5A6771"), 
+                    name="Significance",
+                    labels = c("Male adj. pval <= 0.05\nand Female adj. pval <= 0.05", 
+                               "Female adj. pval <= 0.05", 
+                               "Male adj. pval > 0.05\nand Female adj. pval > 0.05"))+ #"709AE1" for the fourth color
+  theme(legend.spacing.y = unit(0.5, 'cm'))+
+  guides(fill = guide_legend(byrow = TRUE))+
+  geom_point(size = 4, aes(alpha=transparent, color=outline, 
+                           fill=color_threshold), shape=21)+
+  #geom_text_repel(aes(x=OR_female, y=OR_male, label=aid_names))
+  geom_text_repel(data=subset(sexes_cc, color_threshold != '4'),
+            aes(x=OR_female,y=OR_male,label = proper_names), 
+            check_overlap = T, nudge_y=1, label.size=0.25, segment.color=NA)+
+  scale_x_continuous(breaks=c(0,1,5,10,15), expand = c(0.05, 0))+
+  scale_y_continuous(breaks=c(0,1,5,10,15,20,25,30), expand = c(0, 0))+
+  theme(legend.position='none')
+
+p8
+
+#keep this dataframe in the workspace for later plotting
+sexes_ind_cc_ucsf<-sexes_cc
+```
+
+```{r}
+#save this plot
+ggsave(filename="M:/Figures/ID_CC_sex_m1b.png", plot=p8, device='png', 
+       dpi=600, width=4, height=4) #ID for individual disease
+ggsave(filename="~/EHR/toBox/ID_CC_sex_m1b.png", plot=p8, device='png', 
+       dpi=600, width=4, height=4)
+```
+
+Create the same type of plot but for individual disorders in the cohort study group at UCSF
+```{r}
+#filter for the male and female subsets of the cohort
+female_group<-all_ind %>% filter(cohort_type =="Female") %>% filter(study_group=="rc")
+colnames(female_group)<-paste(colnames(female_group),"female",sep="_")
+male_group<-all_ind %>% filter(cohort_type =="Male") %>% filter(study_group=="rc")
+colnames(male_group)<-paste(colnames(male_group),"male",sep="_")
+names(female_group)[names(female_group) == 'aid_names_female'] <- 'aid_names'
+names(male_group)[names(male_group) == 'aid_names_male'] <- 'aid_names'
+#order the dfs
+female_ordered<-female_group %>% arrange(desc(aid_names))
+male_ordered<-male_group %>% arrange(desc(aid_names))
+
+
+#now merge columns
+sexes_rc<-merge(female_ordered,male_ordered, by='aid_names')
+
+#take care of some NA values
+for(i in 1:length(sexes_rc$aid_names)){
+  if(is.na(sexes_rc$adj_pval_female[i])){sexes_rc$adj_pval_female[i]<-1}
+  if(is.na(sexes_rc$adj_pval_male[i])){sexes_rc$adj_pval_male[i]<-1}
+}
+
+#create a fill scheme that represents significance in both f & m, only f, or only m
+sexes_rc<-sexes_rc %>% add_column(color_threshold=NA)
+for(i in 1:length(sexes_rc$color_threshold)){
+  if(sexes_rc$adj_pval_female[i]<=0.05 && sexes_rc$adj_pval_male[i]<=0.05){sexes_rc$color_threshold[i]<-"1"}
+  else if(sexes_rc$adj_pval_female[i]<=0.05 && sexes_rc$adj_pval_male[i]>0.05){sexes_rc$color_threshold[i]<-"2"}
+  else if(sexes_rc$adj_pval_female[i]>0.05 && sexes_rc$adj_pval_male[i]<=0.05){sexes_rc$color_threshold[i]<-"3"}
+  else if(sexes_rc$adj_pval_female[i]>0.05 && sexes_rc$adj_pval_male[i]>0.05){sexes_rc$color_threshold[i]<-"4"}
+}
+
+#create a transparency scheme that represents overall lack of signficance
+sexes_rc<-sexes_rc %>% add_column(transparent = ifelse(sexes_rc$color_threshold=="4", FALSE, TRUE))
+
+#create a color scheme that represents overall lack of significance (to outline the points)
+sexes_rc<-sexes_rc %>% add_column(outline=ifelse(sexes_rc$color_threshold=="4", TRUE, FALSE))
+
+#remove '_' from disorder  names
+sexes_rc <- sexes_rc %>% add_column(proper_names = gsub("_", " ", sexes_rc$aid_names))
+
+#take care of some inf and na values by coercing to an OR of 1
+for(i in 1:length(sexes_rc$aid_names)){
+  if(is.na(sexes_rc$OR_female[i])){sexes_rc$OR_female[i]<-1}
+  else if(is.na(sexes_rc$OR_female[i])==FALSE && is.finite(sexes_rc$OR_female[i])==FALSE){sexes_rc$OR_female[i]<-1}
+  
+  if(is.na(sexes_rc$OR_male[i])){sexes_rc$OR_male[i]<-1}
+  if(is.na(sexes_rc$OR_male[i])==FALSE && is.finite(sexes_rc$OR_male[i])==FALSE){sexes_rc$OR_male[i]<-1}
+
+}
+
+
+#plot the data
+p9<-ggplot(data=sexes_rc, aes(x=OR_female, 
+                                         y=OR_male))+
+  theme_classic()+
+  xlab("Female OR")+
+  ylab("Male OR")+
+  geom_abline(intercept = 0, slope = 1, linetype='dashed')+
+  scale_alpha_discrete(range = c(0.35, 0.9), guide='none')+
+  scale_color_manual(values=c("black", "#edeff0"), guide='none')+
+  scale_fill_manual(values=c("#5e915a", "#FED439", "#709AE1", "#5A6771"), 
+                    name="Significance",
+                    labels = c("Male adj. pval <= 0.05\nand Female adj. pval <= 0.05", 
+                               "Female adj. pval <= 0.05", 
+                               "Male adj. pval <= 0.05",
+                               "Male adj. pval > 0.05\nand Female adj. pval > 0.05"))+ #"709AE1" for the fourth color
+  theme(legend.spacing.y = unit(0.5, 'cm'))+
+  guides(fill = guide_legend(byrow = TRUE))+
+  geom_point(size = 4, aes(alpha=transparent, color=outline, fill=color_threshold), shape=21)+
+  #geom_text_repel(aes(x=OR_female, y=OR_male, label=aid_names))
+  geom_text_repel(data=subset(sexes_rc, color_threshold != '4'),
+            aes(x=OR_female,y=OR_male,label = proper_names), 
+            check_overlap = T, nudge_y=1, size=5, segment.color=NA)+
+  scale_x_continuous(breaks=c(0,1,5, 10), expand = c(0.05, 0))+
+  scale_y_continuous(breaks=c(0,1,5, 10, 15, 20, 25), expand = c(0, 0))+
+  theme(legend.position='none')
+p9
+
+sexes_ind_rc_ucsf<-sexes_rc
+```
+
+Save the image
+```{r}
+#save this plot
+ggsave(filename="M:/Figures/ID_RC_sex_m1b.png", plot=p9, device='png',
+       dpi=600, width=4, height=4) #ID for individual disease
+ggsave(filename="~/EHR/toBox/ID_RC_sex_m1b.png", plot=p9, device='png',
+       dpi=600, width=4, height=4)
+```
+
+### Now let's plot the Stanford validation results, together with the UCSF ones
+```{r}
+#load data frame of overall Stanford results
+cc_metrics_overall<-select(read.csv('M:/Plotting_Data/CC_overall_m1b_stanford.csv'),
+                           -c(X))
+rc_metrics_overall<-select(read.csv('M:/Plotting_Data/RC_overall_m1b_stanford.csv'),
+                           -c(X))
+
+#reformat to combine cc and rc
+df <- rbind(cc_metrics_overall %>% add_column(study_group = "CC"),
+            rc_metrics_overall %>% add_column(study_group = "rc"))
+```
+
+```{r}
+#parse out the overall and sex-specific data frames
+df_sexes <- df %>% filter(Cohort_Type %in% c("Female Cohort", "Male Cohort")) #filter to remove overall values
+df_sexes <- df_sexes %>% add_column(lower_log10 = log10(df_sexes$lower)) %>%
+  add_column(upper_log10 = log10(df_sexes$upper))
+female_cc<- df_sexes %>% filter(Cohort_Type == "Female Cohort") %>% filter(study_group=="CC")
+male_cc<- df_sexes %>% filter(Cohort_Type == "Male Cohort") %>% filter(study_group=="CC")
+female_rc<- df_sexes %>% filter(Cohort_Type == "Female")
+```
+
+
+```{r}
+#start with the full study group results
+df_overall <- df %>% filter(Cohort_Type == "Full Cohort")
+
+#plot the data
+p10<-ggplot(data=df_overall, aes(x=study_group, y=OR, ymin=(lower), ymax=(upper), color=Cohort_Type))+
+  geom_pointrange(size= 1, linewidth=1)+
+  geom_hline(yintercept = 1, linetype="dashed", 
+             color = "black", size=1)+
+  theme_classic()+
+  scale_x_discrete(labels=c("Case-Control\nN=13,292",
+                            "Cohort\nN=260,516"))+
+  ylab("AD Odds Ratio (95% CI)")+
+  xlab("Study Group")+
+  annotate("text", x = 1, y = df_overall$upper[1]+0.1, label = df_overall$sig[1],
+           size=7.5)+
+  annotate("text", x = 2, y = df_overall$upper[2]+0.1, label = df_overall$sig[2],
+           size=7.5)+
+  geom_segment(aes(x=0.95,xend=1.05,y=upper[1],yend=upper[1]))+
+  geom_segment(aes(x=0.95,xend=1.05,y=lower[1],yend=lower[1]))+
+  geom_segment(aes(x=1.95,xend=2.05,y=upper[2],yend=upper[2]))+
+  geom_segment(aes(x=1.95,xend=2.05,y=lower[2],yend=lower[2]))+
+  ggtitle('Overall AD Risk Conferred by Autoimmunity') +
+  scale_y_continuous(limits=c(NA, 2.5))+
+  theme(plot.title = element_text(hjust = 0.5, vjust = 1))+
+  theme(axis.text.x=element_text(size=20),
+        axis.title.x=element_blank(),
+        axis.text.y=element_text(size=20),
+        axis.title.y=element_text(size=20))+
+  scale_color_manual(values=c("#8C1515"), guide="none")
+p10
+```
+
+```{r save this plot}
+ggsave(filename="M:/Figures/OverallOR_stanford_2.png", plot=p10, device='png', 
+       dpi=600, width=6, height=4) # used to be 6x6 for actual manuscript
+ggsave(filename="~/EHR/toBox/OverallOR_stanford_2.png", plot=p10, device='png', 
+       dpi=600, width=6, height=4)
+```
+
+Create the sex-stratified version of the previous plot
+```{r}
+#filter for female- and male-specific study groups
+df_sexes <- df %>% filter(Cohort_Type %in% c("Female Cohort", "Male Cohort"))
+
+#compute some log versions of the stats for the plot
+df_sexes <- df_sexes %>% add_column(lower_log10 = log10(df_sexes$lower)) %>%
+  add_column(upper_log10 = log10(df_sexes$upper))
+female_cc<- df_sexes %>% filter(Cohort_Type == "Female Cohort") %>% filter(study_group=="CC")
+male_cc<- df_sexes %>% filter(Cohort_Type == "Male Cohort") %>% filter(study_group=="CC")
+female_rc<- df_sexes %>% filter(Cohort_Type == "Female Cohort") %>% filter(study_group=="rc")
+male_rc<- df_sexes %>% filter(Cohort_Type == "Male Cohort") %>% filter(study_group=="rc")
+cc_sexes<-df_sexes %>% filter(study_group=="CC")
+rc_sexes<-df_sexes %>% filter(study_group=="rc")
+
+#Data frames for adding text to different panels
+ann_text1 <- data.frame(OR = female_cc$upper[1] + 0.08 ,Cohort_Type = "Female Cohort",lab = female_cc$sig[1], study_group = "CC")
+ann_text2 <- data.frame(OR = male_cc$upper[1] + 0.15 , Cohort_Type = "Male Cohort", lab=male_cc$sig[1], study_group = "CC")
+ann_text3 <- data.frame(OR = female_rc$upper[1] + 0.1 , Cohort_Type = "Female Cohort", lab=female_rc$sig[1], study_group = "rc")
+ann_text4 <- data.frame(OR = male_rc$upper[1] + 0.15 , Cohort_Type = "Male Cohort", lab=male_rc$sig[1], study_group = "rc")
+
+#Data frames for adding confidence intervals and limits of error bars
+geom_segment(aes(x=1.95,xend=2.05,y=lower[2],yend=lower[2])) #have to do some interesting work to get the error bars to show up properly on the log scale
+data.segm1<-data.frame(y= female_cc$lower[1], x=1, yend= female_cc$upper[1], 
+                       xend=1, study_group=as.factor("CC"))
+data.segm1b<-data.frame(y= female_cc$lower[1], x=0.9, yend= female_cc$lower[1], 
+                        xend=1.10, study_group=as.factor("CC"))
+data.segm1c<-data.frame(y= female_cc$upper[1], x=0.9, yend= female_cc$upper[1], 
+                        xend=1.10, study_group=as.factor("CC"))
+data.segm2<-data.frame(y= male_cc$lower[1], x=2, yend= male_cc$upper[1], 
+                       xend=2, study_group=as.factor("CC"))
+data.segm2b<-data.frame(y= male_cc$lower[1], x=1.9, yend= male_cc$lower[1], 
+                        xend=2.10, study_group=as.factor("CC"))
+data.segm2c<-data.frame(y= male_cc$upper[1], x=1.9, yend= male_cc$upper[1], 
+                        xend=2.10, study_group=as.factor("CC"))
+data.segm3<-data.frame(y= female_rc$lower[1], x=1, yend= female_rc$upper[1], 
+                       xend=1, study_group=as.factor("rc"))
+data.segm3b<-data.frame(y= female_rc$lower[1], x=0.9, yend= female_rc$lower[1],
+                        xend=1.1, study_group=as.factor("rc"))
+data.segm3c<-data.frame(y= female_rc$upper[1], x=0.9, yend= female_rc$upper[1],
+                        xend=1.1, study_group=as.factor("rc"))
+data.segm4<-data.frame(y= male_rc$lower[1], x=2, yend= male_rc$upper[1], 
+                       xend=2, study_group=as.factor("rc"))
+data.segm4b<-data.frame(y= male_rc$lower[1], x=1.9, yend= male_rc$lower[1], 
+                        xend=2.1, study_group=as.factor("rc"))
+data.segm4c<-data.frame(y= male_rc$upper[1], x=1.9, yend= male_rc$upper[1], 
+                        xend=2.1, study_group=as.factor("rc"))
+
+# New facet labels
+study_group.labs <- c("Case-Control (N = 13,292)", 
+                      "Cohort (N = 260,516)")
+names(study_group.labs) <- c("CC", "rc")
+
+
+p11<-ggplot(data=df_sexes, 
+       aes(x=Cohort_Type, y=(OR), group=study_group)) +
+  geom_point(size=4) +
+  coord_flip() + 
+  scale_x_discrete(labels=c("Male Cohort" = "Male Subset", 
+                            "Female Cohort" = "Female Subset"))+
+  theme_bw()+
+  geom_hline(yintercept = 1, linetype="dashed", 
+             color = "black", size=1)+
+  ggtitle('Sex-stratified AD Risk Conferred by Autoimmunity') +
+  theme(plot.title = element_text(hjust = 0.5, vjust = 1))+
+  ylab("AD Odds Ratio (95% CI)") +
+  facet_wrap(~study_group, ncol=1, labeller = labeller(study_group = study_group.labs))+
+  geom_segment(data=data.segm1, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_segment(data=data.segm1b, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_segment(data=data.segm1c, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_segment(data=data.segm2, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_segment(data=data.segm2b, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_segment(data=data.segm2c, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_segment(data=data.segm3, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_segment(data=data.segm3b, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_segment(data=data.segm3c, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_segment(data=data.segm4, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_segment(data=data.segm4b, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_segment(data=data.segm4c, aes(x=x,y=y,yend=yend,xend=xend),
+               inherit.aes=FALSE, size=1)+
+  geom_text(data = ann_text1, label=ann_text1$lab[1], size=7)+
+  geom_text(data = ann_text2, label=ann_text2$lab[1], size=7)+
+  geom_text(data = ann_text3, label=ann_text3$lab[1], size=7)+
+  geom_text(data = ann_text4, label=ann_text4$lab[1], size=7)+
+  theme(strip.background =element_rect(fill="white"))+
+  theme(strip.text = element_text(colour = 'black'))+
+  theme(axis.title.y=element_blank(),
+        axis.text.x=element_text(size=15),
+        axis.text.y = element_text(size=15),
+        axis.title.x=element_text(size=14),
+        strip.text = element_text(size = 12))+
+  scale_y_log10(limits=c(NA, 3.2))
+  
+p11
+```
+
+Save the image
+```{r}
+ggsave(filename="M:/Figures/Sex_OverallOR_stanford.png", plot=p11, device='png',
+       dpi=600, width=8, height=4.5)
+ggsave(filename="~/EHR/toBox/Sex_OverallOR_stanford.png", plot=p11, device='png',
+       dpi=600, width=8, height=4.5)
+```
+
+### AD prevalence in Stanford cohort study group, sex-stratified
+```{r}
+#load prevalence data
+rc_prev_df<-select(read.csv('M:/Plotting_Data/RC_prev_m1b_stanford.csv'), -c(X))
+
+#plot the data
+p12<-ggplot(data=rc_prev_df)+geom_bar(aes(x=aid_status, y=ad_prev*100, fill = gender), 
+                                 stat='identity', position=position_dodge(),
+                                 color='black')+
+  geom_errorbar(aes(x = aid_status, ymin=lower_CI*100, ymax=upper_CI*100, fill=gender), width=.2,
+                position=position_dodge(0.85), stat="identity")+
+  theme_minimal()+
+  theme(axis.title.x=element_blank())+
+  scale_x_discrete(labels=c("Autoimmune", "Control"))+
+  labs(fill="Sex")+
+  ylab("AD prevalence (%)")+
+  scale_fill_simpsons()+
+
+  geom_segment(aes(x=1.8,xend=2.2,y=upper_CI[1]*100+0.2,yend=upper_CI[1]*100+0.2))+
+  annotate("text", x = 2.0, y = rc_prev_df$upper_CI[1]*100+0.22, label = "***", size=8)+
+  
+  geom_segment(aes(x=0.8,xend=1.2,y=upper_CI[1]*100+0.05,yend=upper_CI[1]*100+0.05))+
+  annotate("text", x = 1.0, y = rc_prev_df$upper_CI[1]*100+0.09, label = "N.S.", size=5)+
+  
+  geom_segment(aes(x=0.8,xend=1.8,y=upper_CI[1]*100+0.12,yend=upper_CI[1]*100+0.12))+
+  annotate("text", x = 1.3, y = rc_prev_df$upper_CI[1]*100+0.15, label = "***", size=8)+
+  
+  geom_segment(aes(x=1.2,xend=2.2,y=upper_CI[1]*100+0.3,yend=upper_CI[1]*100+0.3))+
+  annotate("text", x = 1.7, y = rc_prev_df$upper_CI[1]*100+0.32, label = "***", size=8)+
+  
+  theme(axis.line.y = element_line(color="grey"),
+        axis.line.x = element_line(color="grey"))+
+  scale_y_continuous(expand = c(0, 0.001), limits=c(NA,0.9))+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())+
+  theme(axis.title.y=element_text(size=17),
+        axis.text.y=element_text(size=17),
+        axis.text.x=element_text(size=17))
+  
+p12
+```
+
+```{r}
+#save the previous plot
+ggsave(filename="M:/Figures/RCprev_stanford.png", plot=p12, device='png', 
+       dpi=600, width=10, height=6.0)
+ggsave(filename="~/EHR/toBox/RCprev_stanford.png", plot=p12, device='png', 
+       dpi=600, width=10, height=6.0)
+```
+
+### Now plot the autoimmunity subtype risk results from the stanford data
+```{r}
+#load the subtype data
+group_cc<-select(read.csv('M:/Plotting_Data/CC_group_m1b_stanford.csv'), -c(X))
+group_rc<-select(read.csv('M:/Plotting_Data/RC_group_m1b_stanford.csv'), -c(X))
+
+#pval correction was a bit off before, correct it here using the Bonferroni correction
+group_cc$adj_pval<-group_cc$pval*8
+group_rc$adj_pval<-group_rc$pval*8
+
+#reformat the data a bit for plotting, merging case-control (cc) and cohort (rc) data
+names(group_rc)[names(group_rc) == 'lower'] <- 'lower_CI' #change column names to match between data frames
+names(group_rc)[names(group_rc) == 'upper'] <- 'upper_CI'
+names(group_rc)[names(group_rc) == 'Cohort_Type'] <- 'cohort_type'
+names(group_cc)[names(group_cc) == 'pvals'] <- 'pval'
+group_rc<-group_rc %>% add_column(N=NA)
+group_cc<-group_cc[names(group_rc)] #change column orders to match
+group_all<-rbind(group_cc %>% add_column(study_group = "cc"), 
+                 group_rc %>% add_column(study_group="rc"))
+
+#set an opacity and color thresholds based on significance
+group_all<-group_all %>% add_column(transparent = ifelse(group_all$adj_pval<=0.05, TRUE, FALSE))
+group_all<-group_all %>% add_column(threshold_color = ifelse(group_all$adj_pval<=0.05, TRUE, FALSE))
+
+#isolate the overall, non-sex-specific dataframe
+overall_group<-group_all %>% filter(cohort_type == "Overall")
+
+#get the order of group names
+ordered_df<- overall_group %>% arrange(adj_pval, desc(OR), study_group)
+level_order <- rev(unique(ordered_df$group_names))
+
+#plot the data
+p13<-ggplot(data=overall_group, aes(y=factor(group_names, level = level_order),
+                                    x=study_group,
+                                        fill=ifelse(adj_pval <= 0.05, adj_pval, NA),
+                                        size=OR))+
+  geom_point(shape=21, aes(alpha=transparent, color=threshold_color))+
+  scale_x_discrete(position = "top", labels=c("Case-Control", "Cohort")) +
+  scale_fill_gradient(low = "#085708",
+                      high = "#87d49c",
+                      name="adj. pval",
+                      trans='log',
+                      #labels=function(adj_pval) format(adj_pval, scientific = TRUE),
+                      breaks=c(0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001, 0.000005, 0.000001))+
+  scale_size(range=c(1,20),
+             name="OR", breaks = c(1, 1.5, 2, 2.5, 3))+
+  theme_minimal()+
+  theme(panel.border = element_rect(color = "grey", fill=NA),
+        axis.text.x=element_text(size=12, angle=25, hjust=0),
+        axis.title.x=element_blank())+
+  xlab("Cohort Type")+ylab("Autoimmune Disease Group")+
+  scale_alpha_discrete(range = c(0.35, 0.9), guide='none')+
+  scale_color_manual(values=c("#edeff0", "black"), guide='none')
+p13
+
+overall_group_stanford<-overall_group %>% add_column(val="stanford")
+```
+
+```{r}
+#save the plot above
+ggsave(filename="M:/Figures/DG_overall_stanford.png", plot=p13, device='png',
+       dpi=600, width=4.5, height=5.75)
+ggsave(filename="~/EHR/toBox/DG_Overall_stanford.png", plot=p13, device='png',
+       dpi=600, width=4.5, height=5.75)
+```
+
+### Plot the disorder subtype results from ucsf and stanford on the same plot
+```{r}
+#merge ucsf and stanford subtype results
+overall_group<-rbind(overall_group_ucsf, overall_group_stanford)
+
+#Create new facet labels
+study_group.labs <- c("UCSF", "Stanford")
+names(study_group.labs) <- c("ucsf", "stanford")
+
+#plot the data
+p14<-ggplot(data=overall_group, aes(y=factor(group_names, 
+                                             level = rev(c("Hematologic",
+                                                           "Gastrointestinal",
+                                                           "Dermatologic", 
+                                                           "Endocrine",
+                                                           "Musculoskeletal",
+                                                           "Vascular", 
+                                                           "Systemic", 
+                                                           "Neurologic"))), 
+                                    x=study_group,
+                                    fill=ifelse(adj_pval <= 0.05, adj_pval, NA),
+                                        size=OR))+
+  geom_point(shape=21, aes(alpha=transparent, color=threshold_color))+
+  scale_x_discrete(position = "top", labels=c("Case-Control", "Cohort")) +
+  scale_fill_gradient(low = "#085708",
+                      high = "#87d49c",
+                      name="adj. pval",
+                      trans='log',
+                      #labels=function(adj_pval) format(adj_pval, scientific = TRUE),
+                      breaks=c(0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001, 0.000005, 0.000001))+
+  scale_size(range=c(1,20),
+             name="OR", breaks = c(1, 3, 5, 10, 15, 20))+
+  theme_minimal()+
+  theme(panel.border = element_rect(color = "grey", fill=NA),
+        axis.text.x=element_text(size=12),
+        axis.title.x=element_blank())+
+  xlab("Cohort Type")+ylab("Autoimmune Disease Group")+
+  scale_alpha_discrete(range = c(0.35, 0.9), guide='none')+
+  scale_color_manual(values=c("#edeff0", "black"), guide='none')+
+  facet_wrap(~val, ncol=2, labeller = labeller(study_group = study_group.labs))
+p14
+```
+
+```{r}
+#save the plot above
+ggsave(filename="M:/Figures/DG_overall_stanford_ucsf.png", plot=p14, 
+       device='png', dpi=600, width=6, height=4.85)
+ggsave(filename="~/EHR/toBox/DG_Overall_stanford_ucsf.png", plot=p14, 
+       device='png', dpi=600, width=6, height=4.85)
+```
+
+### Now plot the sex-specific disease group findings from Stanford
+```{r}
+#re-load the subtype data
+group_cc<-select(read.csv('M:/Plotting_Data/CC_group_m1b_stanford.csv'), -c(X))
+group_rc<-select(read.csv('M:/Plotting_Data/RC_group_m1b_stanford.csv'), -c(X))
+
+#pval correction was a bit off before, correct it here using the Bonferroni correction
+group_cc$adj_pval<-group_cc$pval*8
+group_rc$adj_pval<-group_rc$pval*8
+
+#reformat the data a bit to combine case control and cohort study groups
+names(group_rc)[names(group_rc) == 'lower'] <- 'lower_CI' #change column names to match between data frames
+names(group_rc)[names(group_rc) == 'upper'] <- 'upper_CI'
+names(group_rc)[names(group_rc) == 'Cohort_Type'] <- 'cohort_type'
+names(group_cc)[names(group_cc) == 'pvals'] <- 'pval'
+group_cc<-group_cc[names(group_rc)] #change column orders to match
+group_all<-rbind(group_cc %>% add_column(study_group = "cc"), 
+                 group_rc %>% add_column(study_group="rc"))
+
+#parse this dataframe so you can plot male ORs on one axis, and female ORs on the other
+female_group<-group_all %>% filter(cohort_type =="Female") %>% filter(study_group=="cc")
+colnames(female_group)<-paste(colnames(female_group),"female",sep="_")
+female_ordered<-female_group %>% arrange(desc(group_names_female))
+male_group<-group_all %>% filter(cohort_type =="Male") %>% filter(study_group=="cc")
+colnames(male_group)<-paste(colnames(male_group),"male",sep="_")
+male_ordered<-male_group %>% arrange(desc(group_names_male))
+names(female_ordered)[names(female_ordered) == 'group_names_female'] <- 'group_names'
+names(male_ordered)[names(male_ordered) == 'group_names_male'] <- 'group_names'
+
+
+#merge columns
+sexes_cc<-merge(female_ordered,male_ordered, by='group_names')
+
+#create a fill scheme that represents significance in both f & m, only f, or only m
+sexes_cc<-sexes_cc %>% add_column(color_threshold=NA)
+for(i in 1:length(sexes_cc$color_threshold)){
+  if(sexes_cc$adj_pval_female[i]<=0.05 && sexes_cc$adj_pval_male[i]<=0.05){sexes_cc$color_threshold[i]<-"1"}
+  else if(sexes_cc$adj_pval_female[i]<=0.05 && sexes_cc$adj_pval_male[i]>0.05){sexes_cc$color_threshold[i]<-"2"}
+  else if(sexes_cc$adj_pval_female[i]>0.05 && sexes_cc$adj_pval_male[i]<=0.05){sexes_cc$color_threshold[i]<-"3"}
+  else if(sexes_cc$adj_pval_female[i]>0.05 && sexes_cc$adj_pval_male[i]>0.05){sexes_cc$color_threshold[i]<-"4"}
+}
+
+#create a transparency scheme that represents overall lack of signficance
+sexes_cc<-sexes_cc %>% add_column(transparent = ifelse(sexes_cc$color_threshold=="4", FALSE, TRUE))
+
+#create a color scheme that represents overall lack of significance (to outline the points)
+sexes_cc<-sexes_cc %>% add_column(outline=ifelse(sexes_cc$color_threshold=="4", TRUE, FALSE))
+
+p15<-ggplot(data=sexes_cc, aes(x=OR_female, 
+                                         y=OR_male))+
+  theme_classic()+
+  xlab("Female OR")+
+  ylab("Male OR")+
+  geom_abline(intercept = 0, slope = 1, linetype='dashed')+
+  scale_alpha_discrete(range = c(0.35, 0.9), guide='none')+
+  scale_color_manual(values=c("black", "#edeff0"), guide='none')+
+  scale_fill_manual(values=c("#709AE1", "#5A6771"), 
+                    name="Significance",
+                    labels = c("Male adj. pval <= 0.05\nand Female adj. pval <= 0.05", 
+                               "Male adj. pval <= 0.05",
+                               "Male adj. pval > 0.05\nand Female adj. pval > 0.05"))+ #"#709AE1" for the fourth color
+  theme(legend.spacing.y = unit(0.5, 'cm'))+
+  guides(fill = guide_legend(byrow = TRUE))+
+  geom_point(size = 4, aes(alpha=transparent, color=outline, fill=color_threshold), shape=21)+
+  geom_text_repel(data=subset(sexes_cc, color_threshold != '4'),
+            aes(x=OR_female,y=OR_male,label = group_names), 
+            check_overlap = T, nudge_x = 0.5, nudge_y = 0.5, size=6)+
+    theme(axis.title.y = element_text(size=20),
+        axis.text.y = element_text(size=18),
+        axis.title.x = element_text(size=20),
+        axis.text.x = element_text(size=18),
+        legend.text=element_text(size=18),
+        legend.position='none')+
+  scale_y_continuous(limits=c(NA, 9), breaks=c(0,2,4,6,8))+
+  scale_x_continuous(limits=c(NA,9), breaks=c(0,2,4,6,8))
+
+p15
+
+#keep this data frame in environment for future plotting activities
+sexes_cc_stanford<-sexes_cc %>% add_column(val="stanford")
+```
+
+```{r}
+#save the above plot
+ggsave(filename="M:/Figures/DG_CC_sex_m1b_stanford.png", plot=p15, 
+       device='png', dpi=600, width=6, height=6)
+ggsave(filename="~/EHR/toBox/DG_CC_sex_m1b_stanford.png", plot=p15, 
+       device='png', dpi=600, width=6, height=6)
+```
+
+### Plot the same type of sex-specific group plot but for the cohort group
+```{r}
+#use the group all dataframe from the previous code chunk
+female_group<-group_all %>% filter(cohort_type =="Female") %>% filter(study_group=="rc")
+colnames(female_group)<-paste(colnames(female_group),"female",sep="_")
+female_ordered<-female_group %>% arrange(desc(group_names_female))
+male_group<-group_all %>% filter(cohort_type =="Male") %>% filter(study_group=="rc")
+colnames(male_group)<-paste(colnames(male_group),"male",sep="_")
+male_ordered<-male_group %>% arrange(desc(group_names_male))
+names(female_ordered)[names(female_ordered) == 'group_names_female'] <- 'group_names'
+names(male_ordered)[names(male_ordered) == 'group_names_male'] <- 'group_names'
+
+#now concatenate certain columns
+sexes_rc<-merge(female_ordered,male_ordered, by='group_names')
+
+#create a fill scheme that represents significance in both f & m, only f, or only m
+sexes_rc<-sexes_rc %>% add_column(color_threshold=NA)
+for(i in 1:length(sexes_rc$color_threshold)){
+  if(sexes_rc$adj_pval_female[i]<=0.05 && sexes_rc$adj_pval_male[i]<=0.05){sexes_rc$color_threshold[i]<-"1"}
+  else if(sexes_rc$adj_pval_female[i]<=0.05 && sexes_rc$adj_pval_male[i]>0.05){sexes_rc$color_threshold[i]<-"2"}
+  else if(sexes_rc$adj_pval_female[i]>0.05 && sexes_rc$adj_pval_male[i]<=0.05){sexes_rc$color_threshold[i]<-"3"}
+  else if(sexes_rc$adj_pval_female[i]>0.05 && sexes_rc$adj_pval_male[i]>0.05){sexes_rc$color_threshold[i]<-"4"}
+}
+
+#create a transparency scheme that represents overall lack of signficance
+sexes_rc<-sexes_rc %>% add_column(transparent = ifelse(sexes_rc$color_threshold=="4", FALSE, TRUE))
+
+#create a color scheme that represents overall lack of significance (to outline the points)
+sexes_rc<-sexes_rc %>% add_column(outline=ifelse(sexes_rc$color_threshold=="4", TRUE, FALSE))
+
+p16<-ggplot(data=sexes_rc, aes(x=OR_female, 
+                                         y=OR_male))+
+  theme_classic()+
+  xlab("Female OR")+
+  ylab("Male OR")+
+  geom_abline(intercept = 0, slope = 1, linetype='dashed')+
+  scale_alpha_discrete(range = c(0.35, 0.9), guide='none')+
+  scale_color_manual(values=c("black", "#edeff0"), guide='none')+
+  scale_fill_manual(values=c("#FED439", "#709AE1", "#5A6771"), 
+                    name="Significance",
+                    labels = c("Male adj. pval <= 0.05\nand Female adj. pval <= 0.05", 
+                               "Female adj. pval <= 0.05", 
+                               "Male adj. pval <= 0.05", 
+                               "Male adj. pval > 0.05\nand Female adj. pval > 0.05"))+ #"709AE1" for the fourth color
+  theme(legend.spacing.y = unit(0.5, 'cm'))+
+  guides(fill = guide_legend(byrow = TRUE))+
+  geom_point(size = 4, aes(alpha=transparent, color=outline, fill=color_threshold), shape=21)+
+  scale_y_continuous(limits=c(1, NA))+
+  scale_x_continuous(limits=c(1,NA))+
+  geom_text_repel(data=subset(sexes_rc, outline != TRUE),
+            aes(x=OR_female,y=OR_male,label = group_names), 
+            check_overlap = T, nudge_x = 0.05, nudge_y = 0.15, size=6,
+            segment.color = NA)+
+  theme(axis.title.y = element_text(size=20),
+        axis.text.y = element_text(size=18),
+        axis.title.x = element_text(size=20),
+        axis.text.x = element_text(size=18),
+        legend.text=element_text(size=18),
+        legend.position='none')+
+  scale_y_continuous(limits=c(NA, 3.5))+
+  scale_x_continuous(limits=c(NA, 3.5))
+
+p16
+
+#keep in environment
+sexes_rc_stanford<-sexes_rc %>% add_column(val="stanford")
+```
+
+```{r}
+#save the above plot
+ggsave(filename="M:/Figures/DG_RC_sex_m1b_stanford.png", plot=p16, device='png',
+       dpi=600, width=6, height=6)
+ggsave(filename="~/EHR/toBox/DG_RC_sex_m1b_stanford.png", plot=p16, device='png',
+       dpi=600, width=6, height=6)
+```
+
+
+### Plot the Stanford individual disorder results, to be merged with the ucsf ones
+```{r}
+sig_groups<-c("Dermatologic", "Musculoskeletal", "Gastrointestinal", "Endocrine", "Vascular", "Hematologic")
+
+#load data
+load('M:/Plotting_Data/CC_ind_m1b.Rdata')
+rm(ind_cc)
+ind_cc<-select(read.csv('M:/Plotting_Data/CC_ind_m1b_stanford.csv'), -c(X))
+ind_rc<-select(read.csv('M:/Plotting_Data/RC_ind_m1b_stanford.csv'), -c(X))
+
+#filter the dataframes to include individual disorders that were in significant subtype groups
+names(ind_rc)[names(ind_rc) == 'AID'] <- 'aid_names'
+ind_cc<-ind_cc %>% add_column(keep=0) %>% add_column(group = NA) #add column to indicate if we should keep the data point for plotting or not
+ind_rc<-ind_rc %>% add_column(keep=0) %>% add_column(group = NA)
+
+#disease groups to show/keep
+for(i in 1:length(ind_cc$aid_names)){
+  cur_group<-group_lookup[[ind_cc$aid_names[i]]]
+  ind_cc$group[i]<-cur_group
+  if(cur_group %in% sig_groups){ind_cc$keep[i]<-1}
+}
+for(i in 1:length(ind_rc$aid_names)){
+  cur_group<-group_lookup[[ind_rc$aid_names[i]]]
+  ind_rc$group[i]<-cur_group
+  if(cur_group %in% sig_groups){ind_rc$keep[i]<-1}
+}
+#finally, filter
+ind_cc_filt<-ind_cc %>% filter(keep==1)
+ind_rc_filt<-ind_rc %>% filter(keep==1)
+
+
+#plot the overall results first
+all_ind <- rbind(ind_cc_filt %>% add_column(study_group = "cc"),
+                 ind_rc_filt %>% add_column(study_group = "rc"))
+
+#manually fix those diseases that had adjusted p values of NA (e.g. because of sample size)
+for(i in 1:length(all_ind$aid_names)){
+  if(is.na(all_ind$adj_pval[i])){all_ind$adj_pval[i]<-1}
+}
+
+#set an opacity and color thresholds by significance
+all_ind<-all_ind %>% add_column(transparent = ifelse(all_ind$adj_pval<=0.05, TRUE, FALSE))
+all_ind<-all_ind %>% add_column(threshold_color = ifelse(all_ind$adj_pval<=0.05, TRUE, FALSE))
+
+#filter dataframe to only include the overall results
+ind_overall<-all_ind %>% filter(cohort_type == "Overall")
+
+
+#set the order of group names
+ordered_df<- ind_overall %>% arrange(factor(group, levels = c("Hematologic", "Gastrointestinal", "Dermatologic", "Endocrine", "Musculoskeletal", "Vascular")), adj_pval, desc(OR))
+
+#remove "-" from disorder names
+ordered_df <- ordered_df %>% add_column(proper_names = gsub("_", " ", ordered_df$aid_names))
+
+#set an order for the disorders to appear on the y axis
+level_order <- rev(unique(ordered_df$proper_names))
+
+
+#finally, plot
+p17<-ggplot(data=ordered_df, aes(y=factor(proper_names, level = level_order), 
+                                    x=study_group,
+                                        fill=ifelse(adj_pval <= 0.05, adj_pval, NA),
+                                        size=OR))+
+  geom_point(shape=21, aes(alpha=transparent, color=threshold_color))+ #change these colors #color='#edeff0'
+  scale_x_discrete(position = "top", labels=c("Case-Control", "Cohort")) +
+  scale_fill_gradient(low = "#085708",
+                      high = "#87d49c",
+                      name="adj. pval",
+                      trans='log',
+                      #labels=function(adj_pval) format(adj_pval, scientific = TRUE),
+                      breaks=c(0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001, 0.000005, 0.000001))+
+  scale_size(range=c(1,15),
+             name="OR", breaks = c(1, 2, 3))+
+  theme_minimal()+
+  theme(panel.border = element_rect(color = "grey", fill=NA),
+        axis.text.x=element_text(size=12),
+        axis.title.x=element_blank())+
+  xlab("Cohort Type")+ylab("Individual Autoimmune Diseases")+
+  scale_alpha_discrete(range = c(0.35, 0.9), guide='none')+
+  scale_color_manual(values=c("#edeff0", "black"), guide='none')+
+  theme(axis.text.y=element_text(size=12),
+        axis.text.x = element_text(size=12))+
+  theme(legend.position="bottom")
+  
+p17
+
+#keep in environment
+ordered_df_stanford<-ordered_df %>% add_column(val='stanford') %>% add_column(N="NA")
+```
+
+Now merge the ucsf and stanford results in to the same plot
+```{r}
+#merge stanford and ucsf data
+ordered_df_stanford<-ordered_df_stanford[names(ordered_df_ucsf)]
+ordered_df_val<-rbind(ordered_df_ucsf, ordered_df_stanford)
+
+# New facet labels
+study_group.labs <- c("UCSF", "Stanford")
+names(study_group.labs) <- c("ucsf", "stanford")
+
+#plot
+p18<-ggplot(data=ordered_df_val, aes(y=factor(proper_names, level = level_order), 
+                                    x=study_group,
+                                        fill=ifelse(adj_pval <= 0.05, adj_pval, NA),
+                                        size=OR))+
+  geom_point(shape=21, aes(alpha=transparent, color=threshold_color))+ #change these colors #color='#edeff0'
+  scale_x_discrete(position = "top", labels=c("Case-Control", "Cohort")) +
+  scale_fill_gradient(low = "#085708",
+                      high = "#87d49c",
+                      name="adj. pval",
+                      trans='log',
+                      #labels=function(adj_pval) format(adj_pval, scientific = TRUE),
+                      breaks=c(0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001, 0.000005, 0.000001))+
+  scale_size(range=c(1,8),
+             name="OR", breaks = c(1, 2, 3, 5, 10, 20, 30))+
+  theme_minimal()+
+  theme(panel.border = element_rect(color = "grey", fill=NA),
+        axis.text.x=element_text(size=12),
+        axis.title.x=element_blank())+
+  xlab("Cohort Type")+ylab("Individual Autoimmune Diseases")+
+  scale_alpha_discrete(range = c(0.35, 0.9), guide='none')+
+  scale_color_manual(values=c("#edeff0", "black"), guide='none')+
+  theme(axis.text.y=element_text(size=10),
+        axis.text.x = element_text(size=12))+
+  facet_wrap(~val, ncol=2, labeller = labeller(study_group = study_group.labs))
+  
+p18
+```
+
+```{r}
+#save the plot above
+ggsave(filename="M:/Figures/ID_overall_stanford_ucsf.png", plot=p18, device='png', dpi=600, width=6, height=8)
+ggsave(filename="~/EHR/toBox/ID_Overall_stanford_ucsf.png", plot=p18, device='png', dpi=600, width=6, height=8)
+```
+
+Plot the sex-specific individual disorder results from Stanford
+```{r}
+#start with the case-control study group
+sig_groups<-c("Dermatologic", "Musculoskeletal", "Gastrointestinal", "Endocrine", "Vascular")
+
+#load data
+load('M:/Plotting_Data/CC_ind_m1b.Rdata')
+rm(ind_cc)
+ind_cc<-select(read.csv('M:/Plotting_Data/CC_ind_m1b_stanford.csv'), -c(X))
+ind_rc<-select(read.csv('M:/Plotting_Data/RC_ind_m1b_stanford.csv'), -c(X))
+
+#filter the dataframes by whether the group that the individual disease is part of was significant in the disease subtype analysis
+names(ind_rc)[names(ind_rc) == 'AID'] <- 'aid_names'
+ind_cc<-ind_cc %>% add_column(keep=0) %>% add_column(group = NA) #add column to indicate if we should keep the data point for plotting or not
+ind_rc<-ind_rc %>% add_column(keep=0) %>% add_column(group = NA)
+#disease groups to show
+for(i in 1:length(ind_cc$aid_names)){
+  cur_group<-group_lookup[[ind_cc$aid_names[i]]]
+  ind_cc$group[i]<-cur_group
+  if(cur_group %in% sig_groups){ind_cc$keep[i]<-1}
+}
+for(i in 1:length(ind_rc$aid_names)){
+  cur_group<-group_lookup[[ind_rc$aid_names[i]]]
+  ind_rc$group[i]<-cur_group
+  if(cur_group %in% sig_groups){ind_rc$keep[i]<-1}
+}
+#finally, filter
+ind_cc_filt<-ind_cc %>% filter(keep==1)
+ind_rc_filt<-ind_rc %>% filter(keep==1)
+all_ind <- rbind(ind_cc_filt %>% add_column(study_group = "cc"),
+                 ind_rc_filt %>% add_column(study_group = "rc"))
+
+#parse dataframe so you can plot male ORs on one axis, and female ORs on the other
+female_group<-all_ind %>% filter(cohort_type =="Female") %>% filter(study_group=="cc")
+colnames(female_group)<-paste(colnames(female_group),"female",sep="_")
+female_ordered<-female_group %>% arrange(desc(aid_names_female))
+male_group<-all_ind %>% filter(cohort_type =="Male") %>% filter(study_group=="cc")
+colnames(male_group)<-paste(colnames(male_group),"male",sep="_")
+male_ordered<-male_group %>% arrange(desc(aid_names_male))
+names(female_ordered)[names(female_ordered) == 'aid_names_female'] <- 'aid_names'
+names(male_ordered)[names(male_ordered) == 'aid_names_male'] <- 'aid_names'
+
+#now concatenate certain columns
+sexes_cc<-merge(female_ordered,male_ordered, by='aid_names')
+
+#take care of some NA values
+for(i in 1:length(sexes_cc$aid_names)){
+  if(is.na(sexes_cc$adj_pval_female[i])){sexes_cc$adj_pval_female[i]<-1}
+  if(is.na(sexes_cc$adj_pval_male[i])){sexes_cc$adj_pval_male[i]<-1}
+}
+
+#create a fill scheme that represents significance in both f & m, only f, or only m
+sexes_cc<-sexes_cc %>% add_column(color_threshold=NA)
+for(i in 1:length(sexes_cc$color_threshold)){
+  if(sexes_cc$adj_pval_female[i]<=0.05 && sexes_cc$adj_pval_male[i]<=0.05){sexes_cc$color_threshold[i]<-"1"}
+  else if(sexes_cc$adj_pval_female[i]<=0.05 && sexes_cc$adj_pval_male[i]>0.05){sexes_cc$color_threshold[i]<-"2"}
+  else if(sexes_cc$adj_pval_female[i]>0.05 && sexes_cc$adj_pval_male[i]<=0.05){sexes_cc$color_threshold[i]<-"3"}
+  else if(sexes_cc$adj_pval_female[i]>0.05 && sexes_cc$adj_pval_male[i]>0.05){sexes_cc$color_threshold[i]<-"4"}
+}
+
+#create a transparency scheme that represents overall lack of signficance
+sexes_cc<-sexes_cc %>% add_column(transparent = ifelse(sexes_cc$color_threshold=="4", FALSE, TRUE))
+
+#create a color scheme that represents overall lack of significance (to outline the points)
+sexes_cc<-sexes_cc %>% add_column(outline=ifelse(sexes_cc$color_threshold=="4", TRUE, FALSE))
+
+#remove '_' from disorder names
+sexes_cc <- sexes_cc %>% add_column(proper_names = gsub("_", " ", sexes_cc$aid_names))
+
+#plot
+p19<-ggplot(data=sexes_cc, aes(x=OR_female, 
+                                         y=OR_male))+
+  theme_classic()+
+  xlab("Female OR")+
+  ylab("Male OR")+
+  geom_abline(intercept = 0, slope = 1, linetype='dashed')+
+  scale_alpha_discrete(range = c(0.35, 0.9), guide='none')+
+  scale_color_manual(values=c("black", "#edeff0"), guide='none')+
+  scale_fill_manual(values=c("#5e915a", "#FED439", "#709AE1", "#5A6771"), 
+                    name="Significance",
+                    labels = c("Male adj. pval <= 0.05\nand Female adj. pval <= 0.05", 
+                               "Female adj. pval <= 0.05", 
+                               "Male adj. pval <= 0.05",
+                               "Male adj. pval > 0.05\nand Female adj. pval > 0.05"))+ #"709AE1" for the fourth color
+  theme(legend.spacing.y = unit(0.5, 'cm'))+
+  guides(fill = guide_legend(byrow = TRUE))+
+  geom_point(size = 4, aes(alpha=transparent, color=outline, fill=color_threshold), shape=21)+
+  #geom_text_repel(aes(x=OR_female, y=OR_male, label=aid_names))
+  geom_text_repel(data=subset(sexes_cc, color_threshold != '4'),
+            aes(x=OR_female,y=OR_male,label = proper_names), 
+            check_overlap = T, nudge_y=1, size=5)+
+  scale_x_continuous(expand = c(0.05, 0))+
+  scale_y_continuous(expand = c(0, 0))+
+  theme(legend.position='none')
+p19
+
+#keep in environment
+sexes_ind_cc_stanford<-sexes_cc
+```
+
+```{r}
+#save the plots
+ggsave(filename="M:/Figures/ID_CC_sex_m1b_stanford.png", plot=p19, device='png', dpi=600, width=6, height=6)
+ggsave(filename="~/EHR/toBox/ID_CC_sex_m1b_stanford.png", plot=p19, device='png', dpi=600, width=6, height=6)
+```
+
+Now do the same for the cohort study group in Stanford
+```{r}
+#filter for sex-specific groups in the cohort study group
+female_group<-all_ind %>% filter(cohort_type =="Female") %>% filter(study_group=="rc")
+colnames(female_group)<-paste(colnames(female_group),"female",sep="_")
+female_ordered<-female_group %>% arrange(desc(aid_names_female))
+male_group<-all_ind %>% filter(cohort_type =="Male") %>% filter(study_group=="rc")
+colnames(male_group)<-paste(colnames(male_group),"male",sep="_")
+male_ordered<-male_group %>% arrange(desc(aid_names_male))
+names(female_ordered)[names(female_ordered) == 'aid_names_female'] <- 'aid_names'
+names(male_ordered)[names(male_ordered) == 'aid_names_male'] <- 'aid_names'
+
+#now concatenate certain columns
+sexes_rc<-merge(female_ordered,male_ordered, by='aid_names')
+
+#take care of some NA values
+for(i in 1:length(sexes_rc$aid_names)){
+  if(is.na(sexes_rc$adj_pval_female[i])){sexes_rc$adj_pval_female[i]<-1}
+  if(is.na(sexes_rc$adj_pval_male[i])){sexes_rc$adj_pval_male[i]<-1}
+}
+
+#create a fill scheme that represents significance in both f & m, only f, or only m
+sexes_rc<-sexes_rc %>% add_column(color_threshold=NA)
+for(i in 1:length(sexes_rc$color_threshold)){
+  if(sexes_rc$adj_pval_female[i]<=0.05 && sexes_rc$adj_pval_male[i]<=0.05){sexes_rc$color_threshold[i]<-"1"}
+  else if(sexes_rc$adj_pval_female[i]<=0.05 && sexes_rc$adj_pval_male[i]>0.05){sexes_rc$color_threshold[i]<-"2"}
+  else if(sexes_rc$adj_pval_female[i]>0.05 && sexes_rc$adj_pval_male[i]<=0.05){sexes_rc$color_threshold[i]<-"3"}
+  else if(sexes_rc$adj_pval_female[i]>0.05 && sexes_rc$adj_pval_male[i]>0.05){sexes_rc$color_threshold[i]<-"4"}
+}
+
+#create a transparency scheme that represents overall lack of signficance
+sexes_rc<-sexes_rc %>% add_column(transparent = ifelse(sexes_rc$color_threshold=="4", FALSE, TRUE))
+
+#create a color scheme that represents overall lack of significance (to outline the points)
+sexes_rc<-sexes_rc %>% add_column(outline=ifelse(sexes_rc$color_threshold=="4", TRUE, FALSE))
+
+#create a column that formats the aid names for labels in the plot
+sexes_rc <- sexes_rc %>% add_column(proper_names = gsub("_", " ", sexes_rc$aid_names))
+
+#plot
+p20<-ggplot(data=sexes_rc, aes(x=OR_female, 
+                                         y=OR_male))+
+  theme_classic()+
+  xlab("Female OR")+
+  ylab("Male OR")+
+  geom_abline(intercept = 0, slope = 1, linetype='dashed')+
+  scale_alpha_discrete(range = c(0.35, 0.9), guide='none')+
+  scale_color_manual(values=c("black", "#edeff0"), guide='none')+
+  scale_fill_manual(values=c("#5e915a", "#FED439", "#709AE1", "#5A6771"), 
+                    name="Significance",
+                    labels = c("Male adj. pval <= 0.05\nand Female adj. pval <= 0.05", 
+                               "Female adj. pval <= 0.05", 
+                               "Male adj. pval <= 0.05",
+                               "Male adj. pval > 0.05\nand Female adj. pval > 0.05"))+ #"709AE1" for the fourth color
+  theme(legend.spacing.y = unit(0.5, 'cm'))+
+  guides(fill = guide_legend(byrow = TRUE))+
+  geom_point(size = 4, aes(alpha=transparent, color=outline, fill=color_threshold), shape=21)+
+  #geom_text_repel(aes(x=OR_female, y=OR_male, label=aid_names))
+  geom_text_repel(data=subset(sexes_rc, color_threshold != '4'),
+            aes(x=OR_female,y=OR_male,label = proper_names), 
+            check_overlap = T, nudge_y=1, size=5)+
+  scale_x_continuous(expand = c(0.05, 0))+
+  scale_y_continuous(expand = c(0, 0))+
+  theme(legend.position='none')
+p20
+
+#keep in environment
+sexes_ind_rc_stanford<-sexes_rc
+```
+
+```{r}
+#save the plots
+ggsave(filename="M:/Figures/ID_RC_sex_m1b_stanford.png", plot=p20, device='png', dpi=600, width=6, height=6)
+ggsave(filename="~/EHR/toBox/ID_RC_sex_m1b_stanford.png", plot=p20, device='png', dpi=600, width=6, height=6)
+```
+
+```{r}
+#now plot some disease group sex-specific results from both ucsf and stanford on the same plots
+#these will sort of act like "insets" for the disease group figure, highlighting the most sex-specific findings
+#e.g., the endocrine, GI, and dermatologic categories show the most consistent sex-specificity among analyses, so focus on those first
+
+#combine relevant data frames (keeping them in your workspace, use the existing data frames from the sex-specific group plots)
+all_groups<-rbind(select(sexes_cc_ucsf, -c(N_female, N_male, transparent_female, transparent_male, threshold_color_female, threshold_color_male)), sexes_cc_stanford, select(sexes_rc_ucsf, -c(N_female, N_male, transparent_female, transparent_male, threshold_color_female, threshold_color_male)), sexes_rc_stanford)
+#reformat the data frame
+all_groups_female<-select(all_groups, -c(colnames(all_groups)[grepl("_male", x=colnames(all_groups))]))
+all_groups_male<-select(all_groups, -c(colnames(all_groups)[grepl("_female", x=colnames(all_groups))]))
+cn<-c("group_names", "OR", "lower_CI", "upper_CI", "pval", "cohort_type", "sig", "neg_log10_pval", "adj_pval", "study_group", "color_threshold", "transparent", "outline", "val")
+colnames(all_groups_female)<-cn
+colnames(all_groups_male)<-cn
+ag<-rbind(all_groups_female, all_groups_male)
+
+#filter to include only the groups of interest
+ag_filt<-ag %>% filter(group_names %in% c("Endocrine", "Gastrointestinal", "Dermatologic"))
+ag_filt<-ag_filt %>% add_column(adj_pval_sig = ag_filt$adj_pval<=0.05)
+
+#now plot
+p21<-ggplot(data=ag_filt, aes(x=factor(val,levels=c("ucsf", "stanford")), y=OR, ymax=upper_CI, ymin=lower_CI, color=rev(val)))+
+  geom_pointrange(size= 1, linewidth=1, position=position_dodge(0.2), aes(shape=study_group, alpha=adj_pval_sig))+
+  facet_wrap(.~group_names, nrow=length(unique(ag_filt$group_names)), scales='free')+
+  theme_bw()+
+  scale_y_log10()+
+  scale_x_discrete(labels=c("UCSF", "Stanford"))+
+  scale_color_manual(values=c("#011B47", "#8C1515"))+
+  #scale_color_manual(values=c("#FED439", "#709AE1"))+
+  geom_hline(yintercept=1, linetype='dashed', color='black')+
+  theme(axis.title.x=element_blank())
+  
+p21
+```
+
+```{r}
+#different version of the plot, different symbols/colors to denote the stratifications
+
+p22<-ggplot(data=ag_filt)+
+  geom_pointrange(size= 1, linewidth=1, position=position_dodge2(0.3, reverse=TRUE), aes(x=factor(val,levels=c("ucsf", "stanford")), 
+                                                                          y=OR, ymax=upper_CI, ymin=lower_CI, shape=study_group, 
+                                                                          alpha=adj_pval_sig, fill=cohort_type, color=adj_pval_sig, group = cohort_type))+
+  facet_wrap(~factor(group_names, c("Endocrine", "Dermatologic", "Gastrointestinal")), nrow=length(unique(ag_filt$group_names)), scales='free')+
+  theme_bw()+
+  scale_y_log10()+
+  scale_x_discrete(labels=c("UCSF", "Stanford"))+
+  #scale_color_manual(values=c("#011B47", "#8C1515"))+
+  scale_shape_manual(values=c(21,22))+
+  scale_color_manual(values=c("grey", "black"))+
+  scale_fill_manual(values=c("#FED439", "#709AE1"))+
+  scale_alpha_discrete(range = c(0.35, 0.9), guide='none')+
+  geom_hline(yintercept=1, linetype='dashed', color='black')+
+  theme(axis.title.x=element_blank(),
+        axis.text.x = element_text(size=14),
+        axis.title.y = element_text(size=14),
+        strip.text = element_text(size=14),
+        axis.text.y = element_text(size=12))+
+  theme(strip.background =element_rect(fill="white"))+
+  theme(strip.text = element_text(colour = 'black'))
+  #labs(fill="Sex-specific\nSubset", shape="Study Group")
+  
+p22
+```
+
+```{r}
+#save the plot
+ggsave(filename="M:/Figures/DG_all_sex_m1b_stanford_ucsf.png", plot=p22, device='png', dpi=600, width=7, height=6)
+ggsave(filename="~/EHR/toBox/DG_all_sex_m1b_stanford_ucsf.png", plot=p22, device='png', dpi=600, width=7, height=6)
+```
+
+Plot all subtype groups statified by ucsf/stanford & male/female for the supplementary material
+```{r}
+ag_filt<-ag %>% add_column(adj_pval_sig = ag$adj_pval<=0.05) #sig column
+
+#plot
+p23<-ggplot(data=ag_filt)+
+  geom_pointrange(size= 1, linewidth=1, position=position_dodge2(0.3, reverse=TRUE), aes(x=factor(val,levels=c("ucsf", "stanford")), 
+                                                                          y=OR, ymax=upper_CI, ymin=lower_CI, shape=study_group, 
+                                                                          alpha=adj_pval_sig, fill=cohort_type, color=adj_pval_sig, group = cohort_type))+
+  facet_wrap(~factor(group_names), nrow=2, ncol = 4, scales='free')+
+  theme_bw()+
+  scale_y_log10()+
+  scale_x_discrete(labels=c("UCSF", "Stanford"))+
+  #scale_color_manual(values=c("#011B47", "#8C1515"))+
+  scale_shape_manual(values=c(21,22))+
+  scale_color_manual(values=c("grey", "black"))+
+  scale_fill_manual(values=c("#FED439", "#709AE1"))+
+  scale_alpha_discrete(range = c(0.35, 0.9), guide='none')+
+  geom_hline(yintercept=1, linetype='dashed', color='black')+
+  theme(axis.title.x=element_blank(),
+        axis.text.x = element_text(size=14),
+        axis.title.y = element_text(size=14),
+        strip.text = element_text(size=14),
+        axis.text.y = element_text(size=12))+
+  theme(strip.background =element_rect(fill="white"))+
+  theme(strip.text = element_text(colour = 'black'))
+  #labs(fill="Sex-specific\nSubset", shape="Study Group")
+  
+p23
+```
+
+```{r}
+#save the plot
+ggsave(filename="M:/Figures/allDG_all_sex_m1b_stanford_ucsf.png", plot=p23, device='png', dpi=600, width=10, height=6)
+ggsave(filename="~/EHR/toBox/allDG_all_sex_m1b_stanford_ucsf.png", plot=p23, device='png', dpi=600, width=10, height=6)
+```
+
+Create a plot like the one above for the individual autoimmune diseases
+```{r}
+#bind individual disease data frames together
+all_ind<-rbind(select((sexes_ind_cc_ucsf %>% add_column(val="ucsf") %>% add_column(study_group = "cc")),
+                      -c(N_female, N_male, threshold_color_female, threshold_color_male, transparent_female, transparent_male)),
+                  sexes_ind_cc_stanford %>% add_column(val="stanford") %>% add_column(study_group="cc"),
+                  select((sexes_ind_rc_ucsf %>% add_column(val="ucsf") %>% add_column(study_group="rc")),
+                         -c(N_female, N_male, threshold_color_female, threshold_color_male, transparent_female, transparent_male)),
+                  sexes_ind_rc_stanford %>% add_column(val="stanford") %>% add_column(study_group="rc"))
+
+#reformat the data frame
+all_ind_female<-select(all_ind, -c(colnames(all_ind)[grepl("_male", x=colnames(all_ind))]))
+all_ind_male<-select(all_ind, -c(colnames(all_ind)[grepl("_female", x=colnames(all_ind))]))
+
+#reorder the column names
+cn<-c("aid_names", "OR", "lower_CI", "upper_CI", "pval", "cohort_type", "correction_val", "adj_pval", "sig", "keep", "group", "study_group_1", "color_threshold", "transparent", "outline", "proper_names", "val", "study_group_2")
+colnames(all_ind_female)<-cn
+colnames(all_ind_male)<-cn
+ag<-rbind(all_ind_female, all_ind_male)
+ag<-ag %>% add_column(adj_pval_sig = ag$adj_pval<=0.05)
+ag_filt<-ag %>% filter(aid_names %in% c("Pernicious_Anemia", "Inflammatory_Bowel_Disease", "Celiac_Disease", "Psoriasis", "Vitiligo", "Autoimmune_Thyroiditis", "Type_1_Diabetes", "Rheumatoid_Arthritis", "Polymyalgia_Rheumatica", "Large_Vessel_Vasculitis"))
+
+#now plot
+p24<-ggplot(data=ag_filt)+
+  geom_pointrange(size= 1, linewidth=1, position=position_dodge2(0.3, reverse=TRUE), aes(x=factor(val,levels=c("ucsf", "stanford")), 
+                                                                          y=OR, ymax=upper_CI, ymin=lower_CI, shape=study_group_2, 
+                                                                          alpha=adj_pval_sig, fill=cohort_type, color=adj_pval_sig, group = cohort_type))+
+  facet_wrap(~proper_names, nrow=3, ncol=4, scales='free')+
+  theme_bw()+
+  scale_y_log10()+
+  scale_x_discrete(labels=c("UCSF", "Stanford"))+
+  #scale_color_manual(values=c("#011B47", "#8C1515"))+
+  scale_shape_manual(values=c(21,22))+
+  scale_color_manual(values=c("grey", "black"))+
+  scale_fill_manual(values=c("#FED439", "#709AE1"))+
+  scale_alpha_discrete(range = c(0.35, 0.9), guide='none')+
+  geom_hline(yintercept=1, linetype='dashed', color='black')+
+  theme(axis.title.x=element_blank())+
+  theme(strip.background =element_rect(fill="white"))+
+  theme(strip.text = element_text(colour = 'black'))
+  
+p24
+```
+
+```{r}
+#save the resulting plot, for easier visualization too
+ggsave(filename="M:/Figures/IND_sex_stanford_ucsf.png", plot=p24, device='png', dpi=600, width=10, height=7)
+ggsave(filename="~/EHR/toBox/IND_sex_stanford_ucsf.png", plot=p24, device='png', dpi=600, width=10, height=7)
+```
+
+### Plot the significant disorder subtype and the individual disorders within those subtypes on the same plot
+```{r}
+#see how it looks to plot the overall results of the group analysis and individual analysis on the same plot (need to combine figs)
+group_df<-rbind(overall_group_ucsf, overall_group_stanford) #from the combined ucsf and stanford disease group plot
+ind_df<-rbind(ordered_df_ucsf, ordered_df_stanford) #from the combined ucsf and stanford individual disease plot
+
+#first harmonize the column names so you can combine data frames from subtype/group & individual analysis
+names(group_df)[names(group_df) == "lower_CI"] <- "lower"
+names(group_df)[names(group_df) == "upper_CI"] <- "upper"
+names(group_df)[names(group_df) == "group_names"] <- "names"
+names(ind_df)[names(ind_df) == "aid_names"] <- "names"
+group_df<-group_df %>% add_column(correction_val = NA)
+group_df<-select(group_df, -c(neg_log10_pval))
+group_df<-group_df %>% add_column(group = group_df$names)
+ind_df<-select(ind_df, -c(keep))
+group_df<-group_df %>% add_column(proper_names=group_df$group)
+group_df<-group_df[names(ind_df)] #change column orders to match
+df<-rbind(group_df %>% add_column(analysis="group"), ind_df %>% add_column(analysis="individual"))
+
+#for easy viewing, only include diseases that were significant in 2 of the 4 analyses (e.g. ucsf cc, ucsf rc, stanford cc, or stanford rc)
+df_filt<-df %>% filter(proper_names %in% c("Pernicious Anemia", "Inflammatory Bowel Disease", "Celiac Disease", "Psoriasis", "Vitiligo", "Type 1 Diabetes", "Autoimmune Thyroiditis", "Rheumatoid Arthritis", "Polymyalgia Rheumatica", "Endocrine", "Hematologic", "Dermatologic", "Systemic", "Neurologic", "Gastrointestinal", "Vascular", "Musculoskeletal", "Large Vessel Vasculitis"))
+
+#set an order so that the disease groups show up on top of the individual diseases that fall into them
+level_order<-c("Hematologic", "Pernicious Anemia", "Gastrointestinal", "Inflammatory Bowel Disease", "Celiac Disease", "Dermatologic", "Psoriasis", "Vitiligo", "Endocrine", "Autoimmune Thyroiditis", "Type 1 Diabetes", "Musculoskeletal", "Rheumatoid Arthritis", "Polymyalgia Rheumatica", "Vascular", "Large Vessel Vasculitis", "Systemic", "Neurologic")
+
+#include a column that denotes whether the results were consistent across ucsf and stanford
+#here we're considering "consistent" as showing up as significant in at least one study group from both ucsf and stanford data sets
+df_filt2<-df_filt %>% add_column(consistent=FALSE)
+df_filt3<-within(df_filt2, consistent[names == "Gastrointestinal" | names == 'Dermatologic' 
+                                      | names=='Endocrine' | names=='Musculoskeletal'
+                                      | names=='Inflammatory_Bowel_Disease' | names=='Autoimmune_Thyroiditis' 
+                                      | names=='Type_1_Diabetes' | names=='Rheumatoid_Arthritis'] <- TRUE)
+
+
+study_group.labs <- c("Case-Control", "Cohort")
+names(study_group.labs) <- c("cc", "rc")
+
+#now plot them together
+#can maybe use a different shape for the disease groups and individual diseases
+p25<-ggplot(data=df_filt3, aes(y=factor(proper_names, levels = rev(level_order)), x=study_group,
+                                        fill=ifelse(adj_pval <= 0.05, adj_pval, NA),
+                                        size=OR, group=analysis))+
+  geom_point(aes(alpha=transparent, color=consistent, shape=analysis), position=position_dodge(0.5))+ #, position=ggstance::position_dodgev(height=-3))+ #change these colors
+  scale_shape_manual(values=c(21,21))+
+  scale_x_discrete(position = "top", labels=c("Case-Control", "Cohort")) +
+  scale_fill_gradient(low = "#085708",
+                      high = "#87d49c",
+                      name="adj. pval",
+                      trans='log',
+                      #labels=function(adj_pval) format(adj_pval, scientific = TRUE),
+                      breaks=c(0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001, 0.000005, 0.000001))+
+  scale_size(range=c(1,8),
+             name="OR", breaks = c(1, 3, 5, 10, 15, 20, 30))+
+  theme_minimal()+
+  theme(panel.border = element_rect(color = "grey", fill=NA),
+        axis.text.x=element_text(size=12),
+        axis.title.x=element_blank(),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank())+
+  xlab("Cohort Type")+ylab("Autoimmune Disease Group")+
+  scale_alpha_discrete(range = c(0.35, 0.9), guide='none')+
+  scale_color_manual(values=c("NA", "black"), guide='none')+
+  facet_wrap(~val, ncol=2, labeller = labeller(study_group = study_group.labs))
+p25
+```
+
+```{r}
+#save the plots
+ggsave(filename="M:/Figures/DG_overall_stanford_ucsf2.png", plot=p25, device='png', dpi=600, width=6, height=4.85)
+ggsave(filename="~/EHR/toBox/DG_overall_stanford_ucsf2.png", plot=p25, device='png', dpi=600, width=6, height=4.85)
+```
+
+Denote the individual analyses with a different shape
+```{r}
+#reverse the shapes
+p26<-ggplot(data=df_filt, aes(y=factor(proper_names, levels = rev(level_order)), x=study_group,
+                                        fill=ifelse(adj_pval <= 0.05, adj_pval, NA),
+                                        size=OR, group=analysis))+
+  geom_point(aes(alpha=transparent, color=threshold_color, shape=analysis), position=position_dodge(0.5))+ #, position=ggstance::position_dodgev(height=-3))+ #change these colors
+  scale_shape_manual(values = c(21,23), 
+                     name = "legend")+
+  scale_x_discrete(position = "top", labels=c("Case-Control", "Cohort")) +
+  scale_fill_gradient(low = "#085708",
+                      high = "#87d49c",
+                      name="adj. pval",
+                      trans='log',
+                      #labels=function(adj_pval) format(adj_pval, scientific = TRUE),
+                      breaks=c(0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001, 0.000005, 0.000001),
+                      guide='none')+
+  scale_size(range=c(1,8),
+             name="OR", breaks = c(1, 3, 5, 10, 15, 20))+
+  theme_minimal()+
+  theme(panel.border = element_rect(color = "grey", fill=NA),
+        axis.text.x=element_text(size=12),
+        axis.title.x=element_blank(),
+        plot.background = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank())+
+  xlab("Cohort Type")+ylab("Autoimmune Disease Group")+
+  scale_alpha_discrete(range = c(0.35, 0.9), guide='none')+
+  scale_color_manual(values=c("#edeff0", "black"), guide='none')+
+  facet_wrap(~val, ncol=2, labeller = labeller(study_group = study_group.labs))
+p26
+```
+
+All individual disorder risk signals from ucsf and stanford (not just the significant ones) on the same plot
+```{r}
+#load UCSF individual disorder data again
+load('M:/Plotting_Data/CC_ind_m1b.Rdata') #ORs for case control at UCSF
+load('M:/Plotting_Data/RC_ind_m1b.Rdata') #ORs for cohort at UCSF
+
+#For now, filter to only include the individual disorders that were in significant subtype groups
+names(ind_rc)[names(ind_rc) == 'AID'] <- 'aid_names'
+
+#add column to indicate if we should keep the data point for plotting or not
+ind_cc<-ind_cc %>% add_column(keep=0) %>% add_column(group = NA)
+ind_rc<-ind_rc %>% add_column(keep=0) %>% add_column(group = NA)
+
+#denote if an individual autoimmune disorder was in a sig subtype group
+for(i in 1:length(ind_cc$aid_names)){
+  cur_group<-group_lookup[[ind_cc$aid_names[i]]]
+  ind_cc$group[i]<-cur_group
+  if(cur_group %in% sig_groups){ind_cc$keep[i]<-1}
+}
+for(i in 1:length(ind_rc$aid_names)){
+  cur_group<-group_lookup[[ind_rc$aid_names[i]]]
+  ind_rc$group[i]<-cur_group
+  if(cur_group %in% sig_groups){ind_rc$keep[i]<-1}
+}
+#finally, filter
+ind_cc_filt<-ind_cc
+ind_rc_filt<-ind_rc
+
+
+#bind case-control and cohort data together
+all_ind <- rbind(ind_cc_filt %>% add_column(study_group = "cc"),
+                 ind_rc_filt %>% add_column(study_group = "rc"))
+
+#set an opacity levels based on significance
+all_ind<-all_ind %>% add_column(transparent = ifelse(all_ind$adj_pval<=0.05, 
+                                                     TRUE, FALSE))
+all_ind<-all_ind %>% add_column(threshold_color = ifelse(all_ind$adj_pval<=0.05, 
+                                                         TRUE, FALSE))
+
+#filter dataframe to only include the overall results
+ind_overall<-all_ind %>% filter(cohort_type == "Overall")
+
+#set the order of group names that will appear
+ordered_df<- ind_overall %>% arrange(factor(group, levels = c("Hematologic", "Gastrointestinal", "Dermatologic", "Endocrine", "Musculoskeletal", "Vascular", "Systemic", "Neurologic")), adj_pval, desc(OR))
+
+#remove '_' from disease names for plotting
+ordered_df <- ordered_df %>% add_column(proper_names = gsub("_", " ", ordered_df$aid_names))
+
+#get the order you want diseases to appear on the plot
+level_order <- rev(unique(ordered_df$proper_names))
+
+#How to deal with the NA/Inf OR values?
+#Note the Inf values on the plot itself
+#Mark the NA values with a line
+#also indicate that any NA pvals need to be a certain opacity and outline color
+#based on lack of sig:
+ordered_df$transparent[25]<-FALSE
+ordered_df$transparent[26]<-FALSE
+ordered_df$threshold_color[25]<-FALSE
+ordered_df$threshold_color[26]<-FALSE
+
+ordered_df_ucsf<-ordered_df %>% add_column(val="ucsf")
+```
+
+
+```{r}
+#load Stanford individual disorder data again
+load('M:/Plotting_Data/CC_ind_m1b.Rdata')
+rm(ind_cc)
+ind_cc<-select(read.csv('M:/Plotting_Data/CC_ind_m1b_stanford.csv'), -c(X))
+ind_rc<-select(read.csv('M:/Plotting_Data/RC_ind_m1b_stanford.csv'), -c(X))
+
+#filter the dataframes to include individual disorders that were in significant subtype groups
+names(ind_rc)[names(ind_rc) == 'AID'] <- 'aid_names'
+ind_cc<-ind_cc %>% add_column(keep=0) %>% add_column(group = NA) #add column to indicate if we should keep the data point for plotting or not
+ind_rc<-ind_rc %>% add_column(keep=0) %>% add_column(group = NA)
+
+#disease groups to show/keep
+for(i in 1:length(ind_cc$aid_names)){
+  cur_group<-group_lookup[[ind_cc$aid_names[i]]]
+  ind_cc$group[i]<-cur_group
+  if(cur_group %in% sig_groups){ind_cc$keep[i]<-1}
+}
+for(i in 1:length(ind_rc$aid_names)){
+  cur_group<-group_lookup[[ind_rc$aid_names[i]]]
+  ind_rc$group[i]<-cur_group
+  if(cur_group %in% sig_groups){ind_rc$keep[i]<-1}
+}
+#finally, filter
+ind_cc_filt<-ind_cc
+ind_rc_filt<-ind_rc
+
+
+#plot the overall results first
+all_ind <- rbind(ind_cc_filt %>% add_column(study_group = "cc"),
+                 ind_rc_filt %>% add_column(study_group = "rc"))
+
+#manually fix those diseases that had adjusted p values of NA (e.g. because of sample size)
+for(i in 1:length(all_ind$aid_names)){
+  if(is.na(all_ind$adj_pval[i])){all_ind$adj_pval[i]<-1}
+}
+
+#set an opacity and color thresholds by significance
+all_ind<-all_ind %>% add_column(transparent = ifelse(all_ind$adj_pval<=0.05, TRUE, FALSE))
+all_ind<-all_ind %>% add_column(threshold_color = ifelse(all_ind$adj_pval<=0.05, TRUE, FALSE))
+
+#filter dataframe to only include the overall results
+ind_overall<-all_ind %>% filter(cohort_type == "Overall")
+
+
+#set the order of group names
+ordered_df<- ind_overall %>% arrange(factor(group, levels = c("Hematologic", "Gastrointestinal", "Dermatologic", "Endocrine", "Musculoskeletal", "Vascular", "Systemic", "Neurologic")), adj_pval, desc(OR))
+
+#remove "-" from disorder names
+ordered_df <- ordered_df %>% add_column(proper_names = gsub("_", " ", ordered_df$aid_names))
+
+#set an order for the disorders to appear on the y axis
+level_order <- rev(unique(ordered_df$proper_names))
+
+ordered_df_stanford<-ordered_df %>% add_column(val="stanford")
+```
+
+```{r}
+#merge stanford and ucsf data
+ordered_df_ucsf<-select(ordered_df_ucsf, -N)
+ordered_df_stanford<-ordered_df_stanford[names(ordered_df_ucsf)]
+ordered_df_val<-rbind(ordered_df_ucsf, ordered_df_stanford)
+
+# New facet labels
+study_group.labs <- c("UCSF", "Stanford")
+names(study_group.labs) <- c("ucsf", "stanford")
+
+#plot
+p27<-ggplot(data=ordered_df_val, aes(y=factor(proper_names, level = level_order), 
+                                    x=study_group,
+                                        fill=ifelse(adj_pval <= 0.05, adj_pval, NA),
+                                        size=OR))+
+  geom_point(shape=21, aes(alpha=transparent, color=threshold_color))+ #change these colors #color='#edeff0'
+  scale_x_discrete(position = "top", labels=c("Case-Control", "Cohort")) +
+  scale_fill_gradient(low = "#085708",
+                      high = "#87d49c",
+                      name="adj. pval",
+                      trans='log',
+                      #labels=function(adj_pval) format(adj_pval, scientific = TRUE),
+                      breaks=c(0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001, 0.00005, 0.00001, 0.000005, 0.000001))+
+  scale_size(range=c(1,8),
+             name="OR", breaks = c(1, 2, 3, 5, 10, 20, 30))+
+  theme_minimal()+
+  theme(panel.border = element_rect(color = "grey", fill=NA),
+        axis.text.x=element_text(size=12),
+        axis.title.x=element_blank())+
+  xlab("Cohort Type")+ylab("Individual Autoimmune Diseases")+
+  scale_alpha_discrete(range = c(0.35, 0.9), guide='none')+
+  scale_color_manual(values=c("#edeff0", "black"), guide='none')+
+  theme(axis.text.y=element_text(size=10),
+        axis.text.x = element_text(size=12))+
+  facet_wrap(~val, ncol=2, labeller = labeller(study_group = study_group.labs))
+  
+p27
+```
+
