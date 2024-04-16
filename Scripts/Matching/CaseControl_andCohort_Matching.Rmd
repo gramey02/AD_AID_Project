@@ -1,0 +1,321 @@
+---
+title: "Data Matching"
+author: "Grace Ramey, Grace.Ramey@ucsf.edu"
+output: html_document
+---
+
+This notebook is meant for matching autoimmune disease individuals to non-autoimmune controls (for the retrospective cohort group), and alzheimer's individuals with non-alzheimer's controls (for the case-control group).
+
+
+```{r load data and libraries}
+#load data sets that contain cases and controls
+load('M:/Prematch_data/prematch_cc_clean.Rdata') #case-control (cc) study group
+load('M:/Prematch_data/prematch_rc_clean.Rdata') #retrospective cohort (rc) study group
+cc<-alz
+rc<-aid_distinct
+rm(alz, aid_distinct)
+keywords<-readxl::read_xlsx("~/EHR/keywords_2022_10_26.xlsx") #keywords data frame
+library(dplyr)
+library(MatchIt)
+library(hash)
+library(tibble)
+```
+
+
+```{r standardize before matching}
+#convert certain variables to factors
+cc$race <- as.factor(cc$race)
+cc$ethnicity <- as.factor(cc$ethnicity)
+cc$gender <- as.factor(cc$gender)
+cc$birth_year<-as.factor(as.character(cc$birth_year))
+
+rc$race <- as.factor(rc$race)
+rc$ethnicity <- as.factor(rc$ethnicity)
+rc$gender <- as.factor(rc$gender)
+rc$birth_year<-as.factor(as.character(rc$birth_year))
+
+#standardize column names between cc and rc
+colnames(cc)[colnames(cc) == 'AID_name'] <- "all_AIDs"
+colnames(cc)[colnames(cc) == 'earliest_aid_time'] <- "earliest_aid_date"
+```
+
+
+```{r cc matching using propensity scores}
+## can impose some age filters here prior to matching
+#cc<-cc %>% filter(aaDeath_years>=30) %>% filter(aaDeath_years<100)
+#cc<-cc %>% filter(aaDeath_years>=85) %>% filter(aaDeath_years<100)
+#cc<-cc %>% filter(aaDeath_years>=80) %>% filter(aaDeath_years<100)
+
+#create a matching object for the case-control data set
+#can add or remove variables for different sensitivity analyses
+m.out1 <- matchit(alz ~ birth_year + gender + race + ethnicity + aaDeath_years,
+                  data = cc,
+                  method='nearest',
+                  exact=c('gender', 'race', 'ethnicity'),
+                  ratio=1,
+                  verbose=T)
+#assess quality of the match
+plot(summary(m.out1))
+
+#extract the matched data set from the object
+cc_matched<-match.data(m.out1, distance='prop.score')
+#save the matched data
+save(cc_matched,m.out1, file='M:/Matched_data/matched_cc_clean_m1.Rdata')
+
+#Note: I use the m1/m2/m3/... etc. notation to denote which kind of match criteria I used for a particular data set
+
+#e.g., m1 means I matched on demographic variables (birth year, gender, ethnicity, and race) as well as age at death, whereas m3 means I only matched on birth year, gender, ethnicity, and race
+```
+
+
+```{r final cc quality control steps}
+#for cc cohort...
+
+#mark pairs for removal if either person had alz diagnosed before study enrollment
+#here, we consider study enrollment to be the date when a person was diagnosed with an autoimmune disease
+cc_matched<- cc_matched %>% add_column(remove=0)
+cc_matched<-cc_matched %>% arrange(subclass) #sort the dataset by subclass
+rownames(cc_matched) <- 1:nrow(cc_matched) #re-index the ordered dataframe
+for(i in 1:length(cc_matched$person_id)){
+  if((i%%2) == 0){
+    #copy over the alz date of the case to the control
+    cc_matched$alz_date[i]<-cc_matched$alz_date[i-1]
+  }
+}
+#if the control person has an aid before the alz date, mark the entire pair for removal
+for(i in 1:length(cc_matched$person_id)){
+  if((i%%2) == 0){
+    if(cc_matched$aid[i]==1 && (cc_matched$earliest_aid_date[i] > cc_matched$alz_date[i])){
+      #mark both individuals in the pair for removal
+      cc_matched$remove[i]<-1
+      cc_matched$remove[i-1]<-1
+    }
+  }
+}
+sum(cc_matched$remove)
+cc_matched<-cc_matched %>% filter(remove==0)
+cc_matched<-select(cc_matched, -remove)
+
+#reset the subclass to start from 1 since certain subclasses were filtered out
+cc_matched<-cc_matched %>% add_column(new_sc=0)
+count<-1
+for(i in 1:length(cc_matched$person_id)){
+  if(i%%2==0){
+    cc_matched$new_sc[i]<-cc_matched$new_sc[i-1]
+  }
+  else{
+    cc_matched$new_sc[i]<-count
+    count<-count+1
+  }
+}
+cc_matched<-select(cc_matched,-subclass)
+colnames(cc_matched)[colnames(cc_matched) == 'new_sc'] <- "subclass"
+
+#save
+save(cc_matched, m.out1, file='M:/Matched_data/matched_cc_clean_m1.Rdata')
+```
+
+
+
+```{r rc matching using propensity scores}
+## can impose some age filters here
+#rc<-rc %>% filter(aaDeath_years>=30) %>% filter(aaDeath_years<100)
+#rc<-rc %>% filter(aaDeath_years>=30) %>% filter(aaDeath_years<100)
+#rc<-rc %>% filter(aaDeath_years>=65) %>% filter(aaDeath_years<100)
+#rc<-rc %>% filter(aaDeath_years>=80) %>% filter(aaDeath_years<100)
+
+#create a matching object for the retrospective cohort data set
+#removed aaDeath_years as a matching variable
+m.out2 <- matchit(aid ~ birth_year + gender + race + 
+                    ethnicity + aaDeath_years,
+                  data = rc,
+                  method='nearest',
+                  exact=c('gender', 'race', 'ethnicity'),
+                  ratio=1,
+                  verbose=T)
+#assess quality of the match
+plot(summary(m.out2))
+
+#extract the matched data set from the object
+rc_matched<-match.data(m.out2, distance='prop.score')
+#save the matched data
+save(rc_matched, m.out2, file='M:/Matched_data/matched_rc_clean_m1.Rdata')
+```
+
+
+
+```{r Final rc quality control steps}
+#for rc cohort...
+
+#assign study enrollment dates to the controls based on the aid diagnosis date of the case they were matched with
+m.data1_copy<-rc_matched
+rc_matched<-rc_matched %>% arrange(subclass) #sort the dataset by subclass
+rownames(rc_matched) <- 1:nrow(rc_matched) #re-index the ordered dataframe
+n_diseases<-length(keywords$AID_name) #establish some useful numbers for the for loop
+n_groups<-length(unique(keywords$Group)) #establish some useful numbers for the for loop
+earliest_aid_idx<-which(colnames(rc_matched)=="earliest_aid") #get the "alz" column number
+alz_time_idx<-which(colnames(rc_matched)=="alz_date") #get the number of the column "alz_date"
+for(i in 1:length(rc_matched$person_id)){
+  #even indices are the controls
+  if((i%%2) == 0){
+    #copy over the disease group from case to control
+    rc_matched$disease_groups[i]<-rc_matched$disease_groups[i-1]
+    #copy aid_names
+    rc_matched$all_AIDs[i]<-rc_matched$all_AIDs[i-1]
+    #copy earliest aid and earliest aid date
+    rc_matched$earliest_aid_date[i]<-rc_matched$earliest_aid_date[i-1]
+    rc_matched$earliest_aid[i]<-rc_matched$earliest_aid[i-1]
+  }
+  else{
+    #copy 1s and 0s into disease columns
+    for(j in 1:n_diseases){
+      if(rc_matched[[colnames(rc_matched)[earliest_aid_idx+j]]][i] == 1){
+        rc_matched[[colnames(rc_matched)[earliest_aid_idx+j]]][i+1]<-1
+      }
+    }
+    
+    for(k in 1:n_groups){
+      #copy 1s and 0s into disease group columns
+      if(rc_matched[[colnames(rc_matched)[alz_time_idx+k]]][i] == 1){
+        rc_matched[[colnames(rc_matched)[alz_time_idx+k]]][i+1]<-1
+      }
+    }
+  }
+}
+
+
+#mark pairs for removal if they had alz diagnosed before study enrollment
+rc_matched<- rc_matched %>% add_column(remove=0)
+for(i in 1:length(rc_matched$person_id)){
+  if((i%%2) == 0){
+    if(rc_matched$alz[i]==1){
+      if(rc_matched$earliest_aid_date[i]>rc_matched$alz_date[i]){
+        #mark both individuals in the pair for removal
+        rc_matched$remove[i]<-1
+        rc_matched$remove[i-1]<-1
+      }
+    }
+  }
+}
+sum(rc_matched$remove)
+rc_matched<-rc_matched %>% filter(remove==0)
+rc_matched<-select(rc_matched, -remove)
+
+#reset the subclass to start from 1 since certain subclasses were filtered out
+rc_matched<-rc_matched %>% add_column(new_sc=0)
+count<-1
+for(i in 1:length(rc_matched$person_id)){
+  if(i%%2==0){
+    rc_matched$new_sc[i]<-rc_matched$new_sc[i-1]
+  }
+  else{
+    rc_matched$new_sc[i]<-count
+    count<-count+1
+  }
+}
+rc_matched<-select(rc_matched,-subclass)
+colnames(rc_matched)[colnames(rc_matched) == 'new_sc'] <- "subclass"
+
+#save the data
+save(rc_matched, m.out2, file='M:/Matched_data/matched_rc_clean_m1.Rdata')
+```
+
+
+Temporal data matching for the longitudinal age at AD onset analysis. Take the AD cases from the aid cohort, and match them to AD cases from the background control cohort
+```{r}
+#get people with autoimmune diseases who also had alzheimer's
+ad_aid<-rc %>% filter(aid==1) %>% filter(alz==1)
+#get people without autoimmune diseases who also had alzheimer's
+ad_noaid<-rc %>% filter(aid==0) %>% filter(alz==1)
+#bind together
+ad<-rbind(ad_aid, ad_noaid)
+
+m.out3<- matchit(aid ~ birth_year + gender + race + ethnicity + aaDeath_years,
+                  data = ad, 
+                 discard = "both", #May or may not need to keep this (keep if the match is poor without it, as this will discard poorly matched individuals)
+                 exact = c('gender', 'race', 'ethnicity'),
+                  method='nearest',
+                  ratio=1,
+                  verbose=T)
+#check quality of the match
+plot(summary(m.out3))
+#get data from the matchit object
+rc_temporal<-match.data(m.out3, distance='prop.score')
+#save the matched data
+save(rc_temporal,m.out3, file='M:/Matched_data/matched_rc_temporal.Rdata')
+```
+
+
+```{r final temporal cohort quality control}
+#assign study enrollment dates to the controls based on the aid diagnosis date of the case they were matched with
+m.data3_copy<-rc_temporal
+rc_temporal<-rc_temporal %>% arrange(subclass) #sort the dataset by subclass
+rownames(rc_temporal) <- 1:nrow(rc_temporal) #re-index the ordered dataframe
+n_diseases<-length(keywords$AID_name) #establish some useful numbers for the for loop
+n_groups<-length(unique(keywords$Group)) #establish some useful numbers for the for loop
+earliest_aid_idx<-which(colnames(rc_temporal)=="earliest_aid") #get the "alz" column number
+alz_time_idx<-which(colnames(rc_temporal)=="alz_date") #get the number of the column "alz_date"
+for(i in 1:length(rc_temporal$person_id)){
+  #even indices are the controls
+  if((i%%2) == 0){
+    #copy over the disease group from case to control
+    rc_temporal$disease_groups[i]<-rc_temporal$disease_groups[i-1]
+    #copy aid_names
+    rc_temporal$all_AIDs[i]<-rc_temporal$all_AIDs[i-1]
+    #copy earliest aid and earliest aid date
+    rc_temporal$earliest_aid_date[i]<-rc_temporal$earliest_aid_date[i-1]
+    rc_temporal$earliest_aid[i]<-rc_temporal$earliest_aid[i-1]
+  }
+  else{
+    #copy 1s and 0s into disease columns
+    for(j in 1:n_diseases){
+      if(rc_temporal[[colnames(rc_temporal)[earliest_aid_idx+j]]][i] == 1){
+        rc_temporal[[colnames(rc_temporal)[earliest_aid_idx+j]]][i+1]<-1
+      }
+    }
+    
+    for(k in 1:n_groups){
+      #copy 1s and 0s into disease group columns
+      if(rc_temporal[[colnames(rc_temporal)[alz_time_idx+k]]][i] == 1){
+        rc_temporal[[colnames(rc_temporal)[alz_time_idx+k]]][i+1]<-1
+      }
+    }
+  }
+}
+
+
+#mark pairs for removal if they had alz diagnosed before study enrollment
+rc_temporal<- rc_temporal %>% add_column(remove=0)
+for(i in 1:length(rc_temporal$person_id)){
+  if((i%%2) == 0){
+    if(rc_temporal$alz[i]==1){
+      if(rc_temporal$earliest_aid_date[i]>rc_temporal$alz_date[i]){
+        #mark both individuals in the pair for removal
+        rc_temporal$remove[i]<-1
+        rc_temporal$remove[i-1]<-1
+      }
+    }
+  }
+}
+sum(rc_temporal$remove)
+rc_temporal<-rc_temporal %>% filter(remove==0)
+rc_temporal<-select(rc_temporal, -remove)
+
+#reset the subclass to start from 1 since certain subclasses were filtered out
+rc_temporal<-rc_temporal %>% add_column(new_sc=0)
+count<-1
+for(i in 1:length(rc_temporal$person_id)){
+  if(i%%2==0){
+    rc_temporal$new_sc[i]<-rc_temporal$new_sc[i-1]
+  }
+  else{
+    rc_temporal$new_sc[i]<-count
+    count<-count+1
+  }
+}
+rc_temporal<-select(rc_temporal,-subclass)
+colnames(rc_temporal)[colnames(rc_temporal) == 'new_sc'] <- "subclass"
+
+#save the data
+save(rc_temporal, m.out3, file='M:/Matched_data/matched_rc_temporal.Rdata')
+```
