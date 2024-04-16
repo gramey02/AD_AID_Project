@@ -1,0 +1,230 @@
+---
+title: "Data Cleaning, case-control study"
+author: "Grace Ramey, Grace.Ramey@ucsf.edu"
+output: html_document
+### Script to clean the case-control alzheimer's study group
+---
+
+A couple of acronyms:
+AID = autoimmune disease
+Alz or AD = Alzheimer's disease
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load libraries}
+library(dplyr)
+library(DBI)
+library(odbc)
+library(hash)
+library(tibble)
+```
+
+```{r load data}
+#load the alzheimer's cases and corresponding control data (from alzheimer's queries)
+load("prematched_cc_data.Rdata")
+#load the autoimmune cases and corresponding control data (from autoimmune queries)
+load("prematched_rc_data.Rdata")
+keywords<-readxl::read_xlsx("keywords_2022_10_26.xlsx") #load AID keywords
+```
+
+
+Since this is the cleaning script for the case-control (cc) study group, most of the cleaning will be done on the "prematch_cc" data set:
+```{r clean dfs}
+#filter out individuals based on lacking demographic data (e.g. gender, ethnicity, etc.)
+
+#missing race data
+data_filt <- prematch_cc[!(is.na(prematch_cc$race) | 
+                                 prematch_cc$race=="" |
+                                 prematch_cc$race=="*Unknown" |
+                                 prematch_cc$race=="*Unspecified" |
+                                 prematch_cc$race=="Declined" |
+                                 prematch_cc$race=="Unknown" |
+                                 prematch_cc$race=="Unknown/Declined"),]
+
+#missing ethnicity data
+data_filt <- data_filt[!(is.na(data_filt$ethnicity) | 
+                                 data_filt$ethnicit=="*Unspecified" |
+                                 data_filt$ethnicity=="Declined" |
+                                 data_filt$ethnicity=="Unknown" |
+                              data_filt$ethnicity=="Unknown/Declined"),]
+
+#missing gender data
+data_filt <- data_filt[!(is.na(data_filt$gender) |
+               data_filt$gender=="Unknown" |
+             data_filt$gender=="*Unspecified"|
+             data_filt$gender=="Nonbinary"),]
+
+#*note: for now we will filter out nonbinary individuals because of the small sample size of this group
+
+#combine the "Native Hawaiian", "Other Pacific Islander", and "Native Hawaiin or Other Pacific Islander" categories
+data_filt$race[data_filt$race == 'Native Hawaiian'] <- "Native Hawaiian or Other Pacific Islander"
+data_filt$race[data_filt$race == 'Other Pacific Islander'] <- "Native Hawaiian or Other Pacific Islander"
+```
+
+```{r check for duplicate person ids}
+#check if there are duplicate person ids in the data frame
+length(unique(data_filt$person_id)) == length(data_filt$person_id)
+
+#the length of unique person_ids is the same as the length of the dataframe, great! No need to remove any duplicates
+```
+Indicate who in this case-control data frame also had an autoimmune disease
+```{r aid indication}
+#add a column for each autoimmune disease
+alz<-data_filt
+n_col<-ncol(alz)
+for(i in 1:length(keywords$AID_name)){
+  alz<-alz %>% add_column(temp=0)
+  colnames(alz)[colnames(alz) == 'temp'] <- keywords$Col_names[i]
+}
+
+#indicate if the alz case is in the aid dataset
+aid_df<-prematch_rc %>% filter(aid==1)
+alz<-alz %>% add_column(aid=0)
+for(i in 1:length(alz$person_id)){
+  #get the current person id
+  cur_id<-alz$person_id[i]
+  if(cur_id %in% aid_df$person_id){
+    #put a 1 in the aid column if they have an autoimmune disease
+    alz$aid[i]<-1
+  }
+}
+
+#get the aid name and time for each alz patient who also had an autoimmune disease
+alz<-alz %>% add_column(AID_name = NA) %>% add_column(aid_dates = NA) %>% 
+  add_column(earliest_aid_time = NA) %>% add_column(earliest_aid = NA)
+for(i in 1:length(alz$person_id)){
+  if(alz$aid[i]==1){
+    #filter to only look at the current person id
+    aid_filt<-aid_df %>% filter(person_id==alz$person_id[i])
+    all_aids<-paste(aid_filt$AID_name, collapse=", ")
+    all_times<-paste(aid_filt$aid_date, collapse=", ")
+    alz$AID_name[i]<-all_aids
+    alz$aid_dates[i]<-all_times
+    alz$earliest_aid_time[i]<-min(aid_filt$aid_date)
+    alz$earliest_aid[i]<- paste((aid_filt %>% filter(aid_date ==
+                                                       alz$earliest_aid_time[i]))$AID_name,
+                                collapse=", ")
+  }
+}
+
+#add 1s to the aid columns depending on the aid names for the person
+for(i in 1:length(alz$person_id)){
+  if(alz$aid[i]==1){
+    for(j in 1:length(keywords$AID_name)){
+      if(grepl(alz$AID_name[i], pattern=keywords$AID_name[j])){
+        alz[[n_col+j]][i]<-1
+      }
+    }
+  }
+}
+
+#calculate the number of autoimmune diseases
+alz<-alz %>% add_column(numAIDs = 0)
+for(i in 1:length(alz$person_id)){
+  alz$numAIDs[i]<-rowSums(alz[i, (n_col+1):(ncol(alz)-6)], na.rm=TRUE)
+}
+
+#change the earliest_aid_time column to a date object
+alz$earliest_aid_time<-as.Date(alz$earliest_aid_time, origin='1970-01-01')
+```
+
+
+```{r disease groupings}
+#add an indication for which subtype group the autoimmune diseases of each patient fall into
+col_n<- ncol(alz) #get current number of columns in df
+#add a column for each disease group
+for(i in 1:length(unique(keywords$Group))){
+  alz<-alz %>% add_column(temp = 0)
+  colnames(alz)[colnames(alz) == 'temp'] <- unique(keywords$Group)[i]
+}
+
+#add a column to hold the group names, not just 1s or 0s
+alz<- alz %>% add_column(disease_groups = "")
+
+#create a hash to lookup the group for each AID name
+group_hash<-hash()
+for(i in 1:length(keywords$AID_name)){
+  group_hash[[keywords$AID_name[i]]]<-keywords$Group[i]
+}
+
+#now assign each person's autoimmune disease(s) to the group(s) they fall into
+for(i in 1:length(alz$AID_name)){
+  group_list<-c() #vector that will hold disease group names for each person
+  for(j in 1:length(keywords$AID_name)){
+    if(grepl(alz$AID_name[i], pattern=keywords$AID_name[j])){
+      group_name<-group_hash[[keywords$AID_name[j]]]
+      alz[[group_name]][i] <- 1
+      group_list<-c(group_list, group_name)
+    }
+  }
+  group_list<-unique(group_list)
+  alz$disease_groups[i]<-paste(group_list, collapse=", ")
+  if(i%%40000==0){print(i)}
+}
+```
+
+
+```{r AID before ALZ? If so, filter those individuals out}
+#since we are trying to do causal inference, we want to make sure any alz cases
+#occurred after the AID diagnosis
+alz<-alz %>% add_column(remove=0)
+for(i in 1:length(alz$person_id)){
+  if(i%%40000==0){print(i)}
+  if(alz$aid[i]==1 && alz$alz[i]==1){
+    alz_date<-alz$alz_date[i] #get AD diagnosis date
+    aid_date<-alz$earliest_aid_time[i] #get AID diagnosis date
+    if(alz_date < aid_date){
+      alz$remove[i]<-1
+    }
+  }
+}
+
+#see how many people you are removing
+sum(alz$remove)
+
+#remove the individuals
+alz<-alz %>% filter(remove==0)
+alz<-select(alz, -remove)
+
+```
+
+
+```{r calculate some other important metrics for matching and quality control}
+alz<- alz %>% add_column(ehr_time_days = NA)
+#calculate the length of the person's ehr record (useful for matching)
+for(i in 1:length(alz$person_id)){
+  alz$ehr_time_days[i]<-alz$last_visit[i] - alz$first_visit[i]
+}
+
+#filter out anyone with 0 visits or ehr length of 0 days
+alz<- alz %>% add_column(remove = 0)
+for(i in 1:length(alz$person_id)){
+  if(alz$ehr_time_days[i]==0){alz$remove[i]<-1}
+  if(alz$num_visits[i]==0){alz$remove[i]<-1}
+}
+sum(alz$remove)
+alz<-alz %>% filter(remove==0)
+alz<-select(alz, -remove)
+```
+
+Removed the age at death calculation for Stanford Validation
+```{r calculate age at death}
+#do this so you can match/filter people by lifespan
+alz<-alz%>%add_column(aaDeath_years=NA)
+for(i in 1:length(alz$person_id)){
+  if(i%%40000==0){print(i)}
+  #age at death
+  ##replace 'redacted' column with column that contains patient death date information
+  alz$aaDeath_years[i]<-as.numeric(format(as.Date(as.character(alz$redacted[i]),
+                                                  origin='1970-01-01'), format="%Y")) -
+                                                    alz$birth_year[i]
+}
+```
+
+
+```{r save the cleaned data}
+#save the final dataframe
+save(alz, file = "M:/Prematch_data/prematch_cc_clean.Rdata")
+```

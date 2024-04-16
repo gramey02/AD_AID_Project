@@ -1,0 +1,269 @@
+---
+title: "Data Cleaning"
+author: "Grace Ramey, Grace.Ramey@ucsf.edu"
+output: html_document
+### Script to clean the retrospective cohort AID study group
+---
+
+A couple of acronyms:
+AID = autoimmune disease
+Alz or AD = Alzheimer's disease
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load libraries}
+library(dplyr)
+library(DBI)
+library(odbc)
+library(hash)
+library(tibble)
+```
+
+```{r load data}
+#load the alzheimer's cases and corresponding control data (from alzheimer's queries)
+load("prematched_cc_data.Rdata")
+#load the autoimmune cases and corresponding control data (from autoimmune queries)
+load("prematched_rc_data.Rdata")
+#load the data frame that contains the mapping of each autoimmune disease to a disease subtypes
+keywords<-readxl::read_xlsx("keywords_2022_10_26.xlsx")
+```
+
+
+Since this is the cleaning script for the retrospective cohort (rc) study group, most of the cleaning will be done on the "prematch_rc" data set:
+```{r clean dfs}
+#filter out individuals based on lacking demographic data (e.g. gender, ethnicity, etc.)
+
+#missing race data
+data_filt <- prematch_rc[!(is.na(prematch_rc$race) | 
+                                 prematch_rc$race=="" |
+                                 prematch_rc$race=="*Unknown" |
+                                 prematch_rc$race=="*Unspecified" |
+                                 prematch_rc$race=="Declined" |
+                                 prematch_rc$race=="Unknown" |
+                                 prematch_rc$race=="Unknown/Declined"),]
+
+#missing ethnicity data
+data_filt <- data_filt[!(is.na(data_filt$ethnicity) | 
+                                 data_filt$ethnicit=="*Unspecified" |
+                                 data_filt$ethnicity=="Declined" |
+                                 data_filt$ethnicity=="Unknown" |
+                              data_filt$ethnicity=="Unknown/Declined"),]
+
+#missing gender data
+data_filt <- data_filt[!(is.na(data_filt$gender) |
+               data_filt$gender=="Unknown" |
+             data_filt$gender=="*Unspecified"|
+             data_filt$gender=="Nonbinary"),]
+
+#*note: for now we will filter out nonbinary gender individuals because of the small sample size of this group
+
+#combine the "Native Hawaiian", "Other Pacific Islander", and "Native Hawaiin or Other Pacific Islander" categories
+data_filt$race[data_filt$race == 'Native Hawaiian'] <- "Native Hawaiian or Other Pacific Islander"
+data_filt$race[data_filt$race == 'Other Pacific Islander'] <- "Native Hawaiian or Other Pacific Islander"
+```
+
+
+Since patients can have more than one autoimmune disease, they may be duplicated in the data set. Take care of this duplication issue here:
+```{r merge duplicated individuals}
+#rename data frame (also do this so you have a copy)
+aid<-data_filt
+#remove individual disease columns (will reassign after grouping)
+aid<-select(aid, -keywords$Col_names)
+
+#add some new columns that will be filled in the for loop
+aid<-aid%>%add_column(all_AIDs=NA) %>% add_column(aid_dates=NA) %>% 
+  add_column(earliest_aid_date=NA) %>% add_column(earliest_aid=NA)
+#group by person id and merge unique AID names for each person into a single string:
+for(i in 1:length(aid$person_id)){
+  if(i%%40000==0){print(i)}
+  if(aid$aid[i]==1){
+    #get the current person id
+    cur_id<-aid$person_id[i]
+    #filter the data frame to only include the current person id
+    aid_filt<-aid %>% filter(person_id==cur_id)
+    #collapse the unique autoimmune disease names for the current person into a single string
+    all_aids<-paste(aid_filt$AID_name, collapse=", ")
+    #collapse the unique autoimmune disease dx dates for the current person into single string
+    all_times<-paste(aid_filt$aid_date, collapse=", ")
+    #add these values to the new columns
+    aid$all_AIDs[i]<-all_aids
+    aid$aid_dates[i]<-all_times
+    #get the minimum aid dx date
+    aid$earliest_aid_date[i]<-min(aid_filt$aid_date)
+    ead<-aid$earliest_aid_date[i]
+    #get the name of the earliest autoimmune disease that occurred in the patient
+    #(this step will be most important for patients with multiple autoimmune diseases)
+    aid$earliest_aid[i]<- paste((aid_filt %>% filter(aid_date == ead))$AID_name,
+                                collapse=", ")
+  }
+}
+
+#now that all rows for a patient should contain the same data...remove duplicated person ids
+aid_filt<-select(aid, -c(AID_name, aid_date))
+aid_distinct<-distinct(aid_filt)
+print(length(aid_distinct$person_id) == length(unique(aid_distinct$person_id)))
+
+#Great! Now there are no duplicates
+
+#add back in the columns for individual diseases
+n_col<-ncol(aid_distinct)
+for(i in 1:length(keywords$AID_name)){
+  aid_distinct<-aid_distinct %>% add_column(temp=0)
+  colnames(aid_distinct)[colnames(aid_distinct) == 'temp'] <- keywords$Col_names[i]
+}
+
+#add 1s to the aid columns depending on the aid names for each person
+for(i in 1:length(aid_distinct$person_id)){
+  if(aid_distinct$aid[i]==1){
+    for(j in 1:length(keywords$AID_name)){
+      if(grepl(aid_distinct$all_AIDs[i], pattern=keywords$AID_name[j])){
+        aid_distinct[[n_col+j]][i]<-1
+      }
+    }
+  }
+}
+
+#calculate the number of autoimmune diseases each person has
+aid_distinct<-aid_distinct %>% add_column(numAIDs = 0)
+for(i in 1:length(aid_distinct$person_id)){
+  aid_distinct$numAIDs[i]<-rowSums(aid_distinct[i, (n_col+1):(ncol(aid_distinct))], na.rm=TRUE)
+}
+
+#change the earliest_aid date column to a date object
+aid_distinct$earliest_aid_date<-as.Date(aid_distinct$earliest_aid_date, origin='1970-01-01')
+
+```
+
+
+```{r add alz indication}
+#indicate if each aid_distinct person has alzheimer's
+#do this by intersecting those with alz from the cc data set with the aid_distinct data set
+alz_df <- prematch_cc %>% filter(alz==1)
+aid_distinct<-aid_distinct %>% add_column(alz=0) %>% add_column(alz_date=NA)
+for(i in 1:length(aid_distinct$person_id)){
+  #get the current person id
+  cur_id<-aid_distinct$person_id[i]
+  if(cur_id %in% alz_df$person_id){
+    #if the person_id is in the alz data frame, add a one to that person's alz column
+    aid_distinct$alz[i]<-1
+    alz_filt<-alz_df %>% filter(person_id==cur_id)
+    #also get the date when the person was diagnosed with alz
+    aid_distinct$alz_date[i]<-alz_filt$alz_date[1]
+  }
+}
+
+#change the alz_date column to a date object
+aid_distinct$alz_date<-as.Date(aid_distinct$alz_date, origin='1970-01-01')
+```
+
+
+```{r disease subtypes/groupings}
+#add an indication for which subtype group the autoimmune diseases fall into
+col_n<- ncol(aid_distinct) #get current number of columns in the data frame
+#add columns to hold 1s or 0s for each disease subtype group for each patient
+for(i in 1:length(unique(keywords$Group))){
+  aid_distinct<-aid_distinct %>% add_column(temp = 0)
+  colnames(aid_distinct)[colnames(aid_distinct) == 'temp'] <- unique(keywords$Group)[i]
+}
+
+#add a column to hold the name(s) of the disease subtype(s) a patient has
+aid_distinct<- aid_distinct %>% add_column(disease_groups = "")
+
+#create a hash to lookup the group based on each AID name
+group_hash<-hash()
+for(i in 1:length(keywords$AID_name)){
+  group_hash[[keywords$AID_name[i]]]<-keywords$Group[i]
+}
+
+#now assign each patient's autoimmune disease(s) to a disease group(s)
+for(i in 1:length(aid_distinct$all_AIDs)){
+  group_list<-c() #vector that will hold disease group names for each person
+  for(j in 1:length(keywords$AID_name)){
+    #if the current disease name is in the patient's autoimmune disease list...
+    if(grepl(aid_distinct$all_AIDs[i], pattern=keywords$AID_name[j])){
+      #look up the subtype group the disease name falls under
+      group_name<-group_hash[[keywords$AID_name[j]]]
+      #add a 1 to the column representing this group
+      aid_distinct[[group_name]][i] <- 1
+      group_list<-c(group_list, group_name)
+    }
+  }
+  group_list<-unique(group_list)
+  aid_distinct$disease_groups[i]<-paste(group_list, collapse=", ")
+  if(i%%40000==0){print(i)} #print a checkpoint
+}
+```
+
+
+We are trying to investigate the effect that exposure to autoimmune diseases has on Alzheimer's patients, so remove individuals who had an autoimmune disease diagnosed *after* Alzheimer's:
+```{r Alz before AID?--if so, remove}
+#remove individuals that were diagnosed with alzheimer's before their autoimmune condition, to eliminate reverse causality as much as possible
+aid_distinct<-aid_distinct %>% add_column(remove=0)
+for(i in 1:length(aid_distinct$person_id)){
+  if(aid_distinct$aid[i]==1 && aid_distinct$alz[i]==1){
+    if(aid_distinct$earliest_aid_date[i]>aid_distinct$alz_date[i]){
+      aid_distinct$remove[i]<-1
+    }
+  }
+}
+
+#check how many patients this step will remove
+sum(aid_distinct$remove)
+#filter out the individuals
+aid_distinct<-aid_distinct %>% filter(remove==0)
+aid_distinct<-select(aid_distinct, -remove)
+```
+
+
+
+```{r calculate some other important metrics for matching and quality control}
+#calculate the length of the person's ehr record (useful for matching)
+aid_distinct<- aid_distinct %>% add_column(ehr_time_days = NA)
+for(i in 1:length(aid_distinct$person_id)){
+  aid_distinct$ehr_time_days[i]<-aid_distinct$last_visit[i] - aid_distinct$first_visit[i]
+}
+
+#filter out anyone with 0 visits or ehr length of 0 days
+aid_distinct<- aid_distinct %>% add_column(remove = 0)
+for(i in 1:length(aid_distinct$person_id)){
+  if(aid_distinct$ehr_time_days[i]==0){aid_distinct$remove[i]<-1}
+  if(aid_distinct$num_visits[i]==0){aid_distinct$remove[i]<-1}
+}
+sum(aid_distinct$remove)
+aid_distinct<-aid_distinct %>% filter(remove==0)
+aid_distinct<-select(aid_distinct, -remove)
+
+#calculate age at AD diagnosis
+aid_distinct<-aid_distinct %>% add_column(aaAD_years = NA)
+for(i in 1:length(aid_distinct$person_id)){
+  #print(i)
+  if(aid_distinct$alz[i]==1){
+    #age at AD diagnosis
+    aid_distinct$aaAD_years[i]<-as.numeric(format(as.Date(as.character(aid_distinct$alz_date[i]),
+                                                    origin='1970-01-01'), format="%Y")) -
+                                                      aid_distinct$birth_year[i]
+  }
+}
+```
+
+```{r calculate age at death}
+#calculate age at death so you can match/filter people by lifespan
+aid_distinct<-aid_distinct%>%add_column(aaDeath_years=NA)
+for(i in 1:length(aid_distinct$person_id)){
+  if(i%%40000==0){print(i)}
+  #age at death
+  ##replace 'redacted' column with column that contains patient death date information 
+  aid_distinct$aaDeath_years[i]<-as.numeric(format(as.Date(
+    as.character(aid_distinct$redacted[i]),
+                                                  origin='1970-01-01'), format="%Y")) -
+                                                    aid_distinct$birth_year[i]
+}
+
+```
+
+```{r finally, save the cleaned data}
+#save this final data frame
+save(aid_distinct, file='M:/Prematch_data/prematch_rc_clean.Rdata')
+```
