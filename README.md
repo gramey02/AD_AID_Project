@@ -16,7 +16,15 @@ Required R packages can be found in the _requirements.rtf_ file
 
 ## Scripts
 * Figures.Rmd - generates all figures in the manuscript
-* PowerAnalysis.Rmd - generates statistical power analysis quantifying necessary sample sizes and power for different statistical tests used througout the study
+* CaseControl_Power.R - generates statistical power analysis 
+quantifying necessary sample sizes and power for different statistical 
+tests used througout the case-control study
+* Cohort_Power.R - generates statistical power analysis
+quantifying necessary sample sizes and power for different statistical
+tests used througout the cohort study
+* Longitudinal_Power.R - generates statistical power analysis
+quantifying necessary sample sizes and power for different statistical
+tests used througout the longitudinal age of onset study
 * StudyGroup_Demographics - generates tables containing information on demographics of the study groups, including sself-reported race and ethnicity, gender, age, etc.
 * CC_OR_Analysis.R - quantifies odds ratios and differences in AD prevalence between autoimmune patients and non-autoimmune controls in the case-control study group
 * Cohort_OR_Analysis.R - quantifies odds ratios and differences in AD prevalence between autoimmune patients and non-autoimmune controls in the cohort study group
