@@ -8,7 +8,7 @@ This repository contains the means to conduct a cross-trait risk analysis on ele
 ## Data Availability
 The original data input for the following code was curated from the University of California, San Francisco (UCSF) Observational Medical Outcomes Partnership (OMOP) Common Data Model (CDM), and is not publicly available due to patient data sharing privacy. Analagous data can be extracted from other electronic health record databases using the medical billing codes in the files below, or the pipeline can be adapted for other traits/billing codes of interest.
 
-* [Alzheimer's Disease billing codes]([url](https://docs.google.com/spreadsheets/d/1bzQN4iUvpV92Ke8re1JsipjxPmY9MTlKL0ZoBdUmBPg/edit#gid=0))
+* ([Alzheimer's Disease billing codes](https://docs.google.com/spreadsheets/d/1bzQN4iUvpV92Ke8re1JsipjxPmY9MTlKL0ZoBdUmBPg/edit#gid=0))
 * [Autoimmune disorder billing codes]([url](https://docs.google.com/spreadsheets/d/1d-O7TLsyBrxEE4MqsEuf6322mG9UcLf68ndhuOm6mu4/edit#gid=0))
 
 ## Required packages
