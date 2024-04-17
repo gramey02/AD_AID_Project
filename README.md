@@ -24,7 +24,8 @@ Keywords](https://docs.google.com/spreadsheets/d/1ImZNCqbBNpE3UKrMWOxgX_v3An8_SY
 Required R packages can be found in the _requirements.rtf_ file
 
 ## Scripts
-### General Workflow
+### General Workflow:
+
 
 * __DataCleaning__ - data cleaning pipeline for case-control and cohort study groups
 * __Matching__ - matching pipeline to generate matched case-control, cohort, and longitudinal study group data sets
@@ -62,7 +63,7 @@ This is what the "prematched_rc_data.Rdata" input file to the data cleaning scri
 | 32602         | 15            | 40         | 7/3/19        | Female | Not Hispanic/Latino   | Unknown                                    | 1951       | 0    | NA       | 6/20/00     | 7/30/12    | NA                          |
 
 
-###For the Alzheimer's patients and corresponding controls:
+### For the Alzheimer's patients and corresponding controls:
 This is what the "prematched_cc_data.Rdata" input file to the data cleaning scripts should look like.
 
 | person_id     | num_dx        | num_visits | date of death | gender | ethnicity             | race                                       | birth_year | alz  | alz_date | first_visit | last_visit |
