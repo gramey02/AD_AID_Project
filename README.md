@@ -64,7 +64,7 @@ This is what the "prematched_rc_data.Rdata" input file to the data cleaning scri
 | 32601         | 27            | 100        | 4/3/15        | Male   | Not Hispanic/Latino   | Native Hawaiian or Other Pacific Islander  | 1935       | 0    | NA       | 5/12/04     | 6/7/14     | NA                          |
 | 32602         | 15            | 40         | 7/3/19        | Female | Not Hispanic/Latino   | Unknown                                    | 1951       | 0    | NA       | 6/20/00     | 7/30/12    | NA                          |
 
-_Notice that a person (e.g. person_id 2) can have more than one autoimmune disorder
+_Notice that a person (e.g. person_id 2) can have more than one autoimmune disorder_
 
 ### For the Alzheimer's patients and corresponding controls:
 This is what the "prematched_cc_data.Rdata" input file to the data cleaning scripts should look like.
