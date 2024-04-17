@@ -1,5 +1,5 @@
 # Cross-trait Risk Analysis: Alzheimer's & Autoimmunity
-This repository contains the means to conduct a cross-trait risk analysis on electronic health record study groups. It was first used to quantify risk associations between autoimmune disorders and Alzheimer's Disease (AD) in both a case-control (CC) and cohort study design.
+This repository contains the means to conduct a cross-trait risk analysis on electronic health record study groups. It was first used to quantify risk associations between autoimmune disorders and Alzheimer's Disease (AD) in both a case-control and cohort study design.
 
 
 ![Fig1](https://github.com/gramey02/AD_AID_Project/assets/94878687/a1fbe3e5-3c48-4d1a-8897-1596c69854b6)
@@ -63,6 +63,7 @@ This is what the "prematched_rc_data.Rdata" input file to the data cleaning scri
 | 32601         | 27            | 100        | 4/3/15        | Male   | Not Hispanic/Latino   | Native Hawaiian or Other Pacific Islander  | 1935       | 0    | NA       | 5/12/04     | 6/7/14     | NA                          |
 | 32602         | 15            | 40         | 7/3/19        | Female | Not Hispanic/Latino   | Unknown                                    | 1951       | 0    | NA       | 6/20/00     | 7/30/12    | NA                          |
 
+_Notice that a person (e.g. person_id 2) can have more than one autoimmune disorder
 
 ### For the Alzheimer's patients and corresponding controls:
 This is what the "prematched_cc_data.Rdata" input file to the data cleaning scripts should look like.
@@ -74,6 +75,13 @@ This is what the "prematched_cc_data.Rdata" input file to the data cleaning scri
 | ...           | ...           | ...        | ...           | ...    | ...                   | ...                                        | ...        | ...  | ...      | ...         | ...        |
 | 3             | 11            | 30         | 8/8/2019      | Female | Not Hispanic/Latino   | White                                      | 1949       | 0    | 10/1/15  | 1/15/10     | 2/2/17     |
 | ...           | ...           | ...        | ...           | ...    | ...                   | ...                                        | ...        | ...  | ...      | ...         | ...        |
+
+AID = autoimmune disorder
+aid_date = first instance of autoimmune disorder billing code
+ALZ = Alzheimer's disease
+alz_date = first instance of Alzheimer's billing code
+dx = diagnosis
+
 
 ## Acknowledgements
 Funding sources for this research include NIA R01AG060393, NIAMS P30 AR070155, F30 Fellowship 1F30AG079504-01, and the UCSF Discovery Fellows. We would also like to acknowledge the use of the [UCSF Information Commons](https://informationcommons.ucsf.edu/) and [UCSF Research Analysis Environment](https://it.ucsf.edu/service/rae) computational research platforms. Through these platforms, the project was supported by the National Center for Advancing Translational Sciences, National Institutes of Health, through UCSF-CTSI Grant Number UL1 TR001872. Its contents are solely the responsibility of the authors and do not necessarily represent the official views of the NIH.
