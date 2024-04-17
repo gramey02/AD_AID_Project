@@ -77,10 +77,10 @@ This is what the "prematched_cc_data.Rdata" input file to the data cleaning scri
 | 3             | 11            | 30         | 8/8/2019      | Female | Not Hispanic/Latino   | White                                      | 1949       | 0    | 10/1/15  | 1/15/10     | 2/2/17     |
 | ...           | ...           | ...        | ...           | ...    | ...                   | ...                                        | ...        | ...  | ...      | ...         | ...        |
 
-AID = autoimmune disorder
-aid_date = first instance of autoimmune disorder billing code
-ALZ = Alzheimer's disease
-alz_date = first instance of Alzheimer's billing code
+AID = autoimmune disorder,
+aid_date = first instance of autoimmune disorder billing code,
+ALZ = Alzheimer's disease,
+alz_date = first instance of Alzheimer's billing code,
 dx = diagnosis
 
 
