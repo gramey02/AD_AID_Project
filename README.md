@@ -35,7 +35,7 @@ Required R packages can be found in the _requirements.rtf_ file
 * __Longitudinal_Onset_Analysis__ - quantifies distributional differences between AD onset age between different group stratifications. Also generates survival curves and hazard ratio estimates
 * __Figures.Rmd__ - generates all figures in the manuscript
 * __PowerCalculations__ - generates statistical power analyses that quantify the necessary sample sizes and power for different comparisons of the odds ratio and longitudinal analyses
-* __HelperFunction__ - functions that streamline code in the previous files
+* __HelperFunctions__ - functions that streamline code in the previous files
 
 _note: due to proprietary OMOP naming conventions at different institutions, database column names and other UCSF-specific information has been redacted from these scripts_
 
