@@ -47,6 +47,9 @@ Tables from the mansucript.
 This is an example data frame that represents the structure (e.g. column 
 formats) that would be ideal for input into the data cleaning scripts.
 
+### For the autoimmunity patients and corresponding controls:
+This is what the "prematched_rc_data.Rdata" input file to the data cleaning scripts should look like.
+
 | person_id     | num_dx        | num_visits | date of death | gender | ethnicity             | race                                       | birth_year | aid  | aid_date | first_visit | last_visit | AID name                    |
 |---------------|---------------|------------|---------------|--------|-----------------------|--------------------------------------------|------------|------|----------|-------------|------------|-----------------------------|
 | 1             | 10            | 30         | 5/5/20        | Female | Hispanic/Latino       | Other                                      | 1940       | 1    | 1/15/55  | 1/1/10      | 7/6/18     | Type 1 Diabetes             |
@@ -57,6 +60,18 @@ formats) that would be ideal for input into the data cleaning scripts.
 | ...           | ...           | ...        | ...           | ...    | ...                   | ...                                        | ...        | ...  | ...      | ...         | ...        | ...                         |
 | 32601         | 27            | 100        | 4/3/15        | Male   | Not Hispanic/Latino   | Native Hawaiian or Other Pacific Islander  | 1935       | 0    | NA       | 5/12/04     | 6/7/14     | NA                          |
 | 32602         | 15            | 40         | 7/3/19        | Female | Not Hispanic/Latino   | Unknown                                    | 1951       | 0    | NA       | 6/20/00     | 7/30/12    | NA                          |
+
+
+###For the Alzheimer's patients and corresponding controls:
+This is what the "prematched_cc_data.Rdata" input file to the data cleaning scripts should look like.
+
+| person_id     | num_dx        | num_visits | date of death | gender | ethnicity             | race                                       | birth_year | alz  | alz_date | first_visit | last_visit |
+|---------------|---------------|------------|---------------|--------|-----------------------|--------------------------------------------|------------|------|----------|-------------|------------|
+| 1             | 50            | 20         | 6/24/16       | Female | Hispanic/Latino       | Other                                      | 1934       | 1    | 5/3/04   | 12/4/00     | 8/29/10    |
+| 2             | 20            | 16         | 10/10/20      | Male   | Not Hispanic/Latino   | Asian                                      | 1945       | 1    | 9/21/00  | 11/26/99    | 3/7/06     |
+| ...           | ...           | ...        | ...           | ...    | ...                   | ...                                        | ...        | ...  | ...      | ...         | ...        |
+| 3             | 11            | 30         | 8/8/2019      | Female | Not Hispanic/Latino   | White                                      | 1949       | 0    | 10/1/15  | 1/15/10     | 2/2/17     |
+| ...           | ...           | ...        | ...           | ...    | ...                   | ...                                        | ...        | ...  | ...      | ...         | ...        |
 
 ## Acknowledgements
 Funding sources for this research include NIA R01AG060393, NIAMS P30 AR070155, F30 Fellowship 1F30AG079504-01, and the UCSF Discovery Fellows. We would also like to acknowledge the use of the [UCSF Information Commons](https://informationcommons.ucsf.edu/) and [UCSF Research Analysis Environment](https://it.ucsf.edu/service/rae) computational research platforms. Through these platforms, the project was supported by the National Center for Advancing Translational Sciences, National Institutes of Health, through UCSF-CTSI Grant Number UL1 TR001872. Its contents are solely the responsibility of the authors and do not necessarily represent the official views of the NIH.
