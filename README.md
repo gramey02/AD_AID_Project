@@ -1,5 +1,5 @@
 # Cross-trait Risk Analysis: Alzheimer's & Autoimmunity
-This repository contains the means to conduct a cross-trait risk analysis on electronic health record study groups. It was first used to quantify risk associations between autoimmune disorders and Alzheimer's Disease (AD) in both a case-control and cohort study design.
+This repository contains the means to conduct a cross-trait risk analysis on electronic health record (EHR) study groups. It was first used to quantify risk associations between autoimmune disorders and Alzheimer's Disease (AD) in both a case-control and cohort study design.
 
 
 ![Fig1](https://github.com/gramey02/AD_AID_Project/assets/94878687/ec43c2f0-989e-4d4d-8112-eae558b406b6)
