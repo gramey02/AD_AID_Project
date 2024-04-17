@@ -47,25 +47,16 @@ Tables from the mansucript.
 This is an example data frame that represents the structure (e.g. column 
 formats) that would be ideal for input into the data cleaning scripts.
 
-| person_id     | num_dx        | num_visits | date of death | gender | ethnicity             | race                                       | birth_year | aid  | aid_date | 
-first_visit | last_visit | AID name                    |
-|--------------|--------------|-----------|--------------|-------|----------------------|-------------------------------------------|-----------|-----|---------|------------|-----------|----------------------------|
-| 1             | 10            | 30         | 5/5/20        | Female | Hispanic/Latino       | Other                                      | 1940       | 1    | 1/15/55  | 
-1/1/10      | 7/6/18     | Type 1 Diabetes             |
-| 2             | 30            | 70         | 1/30/19       | Male   | Not Hispanic/Latino   | White                                      | 1955       | 1    | 3/1/00   | 
-1/1/99      | 8/2/15     | Inflammatory Bowel Disease  |
-| 2             | 30            | 70         | 1/30/19       | Male   | Not Hispanic/Latino   | White                                      | 1955       | 1    | 9/15/10  | 
-1/1/99      | 8/2/15     | Rheumatoid Arthritis        |
-| 3             | 25            | 50         | 6/1/21        | Female | Not Hispanic/Latino   | Black/African American                     | 1959       | 1    | 2/1/12   | 
-3/4/10      | 5/6/20     | Vitiligo                    |
-| ...           | ...           | ...        | ...           | ...    | ...                   | ...                                        | ...        | ...  | ...      | 
-...         | ...        | ...                         |
-| ...           | ...           | ...        | ...           | ...    | ...                   | ...                                        | ...        | ...  | ...      | 
-...         | ...        | ...                         |
-| 32601         | 27            | 100        | 4/3/15        | Male   | Not Hispanic/Latino   | Native Hawaiian or Other Pacific Islander  | 1935       | 0    | NA       | 
-5/12/04     | 6/7/14     | NA                          |
-| 32602         | 15            | 40         | 7/3/19        | Female | Not Hispanic/Latino   | Unknown                                    | 1951       | 0    | NA       | 
-6/20/00     | 7/30/12    | NA                          |
+| person_id     | num_dx        | num_visits |
+|---------------|---------------|------------|
+| 1             | 10            | 30         |
+| 2             | 30            | 70         |
+| 2             | 30            | 70         |
+| 3             | 25            | 50         |
+| ...           | ...           | ...        |
+| ...           | ...           | ...        |
+| 32601         | 27            | 100        |
+| 32602         | 15            | 40         |
 
 ## Acknowledgements
 Funding sources for this research include NIA R01AG060393, NIAMS P30 AR070155, F30 Fellowship 1F30AG079504-01, and the UCSF Discovery Fellows. We would also like to acknowledge the use of the [UCSF Information Commons](https://informationcommons.ucsf.edu/) and [UCSF Research Analysis Environment](https://it.ucsf.edu/service/rae) computational research platforms. Through these platforms, the project was supported by the National Center for Advancing Translational Sciences, National Institutes of Health, through UCSF-CTSI Grant Number UL1 TR001872. Its contents are solely the responsibility of the authors and do not necessarily represent the official views of the NIH.
