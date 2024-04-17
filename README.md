@@ -25,6 +25,7 @@ Required R packages can be found in the _requirements.rtf_ file
 
 ## Scripts
 ### General Workflow:
+![Code_workflow](https://github.com/gramey02/AD_AID_Project/assets/94878687/37bdb612-27b5-4a58-b741-9dea309c5688)
 
 
 * __DataCleaning__ - data cleaning pipeline for case-control and cohort study groups
