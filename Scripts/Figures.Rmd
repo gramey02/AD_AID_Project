@@ -109,7 +109,7 @@ ann_text3 <- data.frame(OR = female_rc$upper[1] + 0.15 , Cohort_Type = "Female C
 ann_text4 <- data.frame(OR = male_rc$upper[1] + 0.25 , Cohort_Type = "Male Cohort", lab=male_rc$sig[1], study_group = "rc")
 
 #Data frames for adding confidence interval bars and limits of error bars
-geom_segment(aes(x=1.95,xend=2.05,y=lower[2],yend=lower[2])) #have to do some interesting work to 
+geom_segment(aes(x=1.95,xend=2.05,y=lower[2],yend=lower[2]))
 data.segm1<-data.frame(y= female_cc$lower[1], x=1, yend= female_cc$upper[1], 
                        xend=1, study_group=as.factor("CC"))
 data.segm1b<-data.frame(y= female_cc$lower[1], x=0.9, yend= female_cc$lower[1],
@@ -269,6 +269,47 @@ ggsave(filename="M:/Figures/RCprev.png", plot=p3, device='png', dpi=600,
 ggsave(filename="~/EHR/toBox/RCprev.png", plot=p3, device='png', dpi=600, 
        width=10, height=6.0)
 ```
+
+Different way of visualizing the prevalence plots
+```{r}
+#load data for the prevalence plot from the cohort study group
+load('M:/Plotting_Data/RC_prev_m1b.Rdata')
+
+p3b<-ggplot()+
+  geom_errorbar(data=rc_prev_df, aes(x=aid_status, y=ad_prev*100, 
+                                       ymin=lower_CI*100, ymax=upper_CI*100, 
+                                       color=gender, group=aid_status),
+                  size=1, width=0.2, position=position_dodge2(0.2))+
+  geom_point(data=rc_prev_df, aes(x=aid_status, y=ad_prev*100, color=gender, fill=gender), 
+             size=4, shape = 21, position=position_dodge2(0.2))+
+  scale_x_discrete(labels=c("Autoimmune", "Control"))+
+  labs(color="Sex")+
+  ylab("AD prevalence (%)")+
+  scale_color_simpsons()+
+  scale_fill_simpsons()+
+  theme_minimal()+
+  theme(axis.line.y = element_line(color="grey"),
+        axis.line.x = element_line(color="grey"))+
+  scale_y_continuous(limits=c(0,5.75))+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())+
+  theme(axis.title.y=element_text(size=17),
+        axis.text.y=element_text(size=20),
+        axis.text.x=element_text(size=17))+
+  theme(axis.title.x=element_blank())
+
+p3b
+```
+
+```{r}
+#save the newer version of the plot
+ggsave(filename="M:/Figures/RCprev.png", plot=p3b, device='png', dpi=600, 
+       width=10, height=6.0)
+ggsave(filename="~/EHR/toBox/RCprev.png", plot=p3b, device='png', dpi=600, 
+       width=10, height=6.0)
+```
+
+
 
 ### Odds ratios stratified by autoimmune disorder subtype (also called disease group)
 (still overall, not further stratified by sex)
@@ -1026,6 +1067,46 @@ ggsave(filename="M:/Figures/RCprev_stanford.png", plot=p12, device='png',
 ggsave(filename="~/EHR/toBox/RCprev_stanford.png", plot=p12, device='png', 
        dpi=600, width=10, height=6.0)
 ```
+
+Different way of visualizing the prevalence plot
+```{r}
+#load prevalence data
+rc_prev_df<-select(read.csv('M:/Plotting_Data/RC_prev_m1b_stanford.csv'), -c(X))
+
+p12b<-ggplot()+
+  geom_errorbar(data=rc_prev_df, aes(x=aid_status, y=ad_prev*100, 
+                                       ymin=lower_CI*100, ymax=upper_CI*100, 
+                                       color=gender, group=aid_status),
+                  size=1, width=0.2, position=position_dodge2(0.2))+
+  geom_point(data=rc_prev_df, aes(x=aid_status, y=ad_prev*100, color=gender, fill=gender), 
+             size=4, shape = 21, position=position_dodge2(0.2))+
+  scale_x_discrete(labels=c("Autoimmune", "Control"))+
+  labs(color="Sex")+
+  ylab("AD prevalence (%)")+
+  scale_color_simpsons()+
+  scale_fill_simpsons()+
+  theme_minimal()+
+  theme(axis.line.y = element_line(color="grey"),
+        axis.line.x = element_line(color="grey"))+
+  scale_y_continuous(limits=c(0,0.9))+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())+
+  theme(axis.title.y=element_text(size=17),
+        axis.text.y=element_text(size=20),
+        axis.text.x=element_text(size=17))+
+  theme(axis.title.x=element_blank())
+
+p12b
+```
+
+```{r}
+#save the newer version of the plot
+ggsave(filename="M:/Figures/RCprev_stanford.png", plot=p12b, device='png', dpi=600, 
+       width=10, height=6.0)
+ggsave(filename="~/EHR/toBox/RCprev_stanford.png", plot=p12b, device='png', dpi=600, 
+       width=10, height=6.0)
+```
+
 
 ### Now plot the autoimmunity subtype risk results from the stanford data
 ```{r}
