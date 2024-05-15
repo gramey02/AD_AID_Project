@@ -47,6 +47,10 @@ supplementary figures.
 ## Tables
 Tables from the mansucript.
 
+## Supplementary Materials
+Supplementary figures and tables from the manuscript. Includes supporting data values representing data points in all 
+figures.
+
 ## Data Structure Example
 This is an example data frame that represents the structure (e.g. column 
 formats) that would be ideal for input into the data cleaning scripts.
